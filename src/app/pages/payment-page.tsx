@@ -29,7 +29,9 @@ const plans = [
 
 export function PaymentPage() {
   const navigate = useNavigate();
-  const [selectedPlan, setSelectedPlan] = useState<typeof plans[0] | null>(null);
+  const [selectedPlan, setSelectedPlan] = useState<(typeof plans)[0] | null>(
+    null,
+  );
   const [isPaying, setIsPaying] = useState(false);
   const [secondsLeft, setSecondsLeft] = useState(5);
   const [paymentSuccess, setPaymentSuccess] = useState(false);
@@ -39,20 +41,17 @@ export function PaymentPage() {
       const timer = setTimeout(() => setSecondsLeft(secondsLeft - 1), 1000);
       return () => clearTimeout(timer);
     } else if (isPaying && secondsLeft === 0) {
-      // Payment success
       setPaymentSuccess(true);
-      // Update teacher subscription to pro
       const teachers = getAdminTeachers();
       if (teachers.length > 0) {
-        teachers[0].subscription = "pro"; // Assume first teacher is current
+        teachers[0].subscription = "pro";
         saveAdminTeachers(teachers);
       }
-      // Redirect after a moment
       setTimeout(() => navigate("/dashboard"), 2000);
     }
   }, [isPaying, secondsLeft, navigate]);
 
-  const handlePay = (plan: typeof plans[0]) => {
+  const handlePay = (plan: (typeof plans)[0]) => {
     setSelectedPlan(plan);
     setIsPaying(true);
     setSecondsLeft(5);
@@ -67,9 +66,15 @@ export function PaymentPage() {
       <div className="min-h-screen bg-gray-50 flex items-center justify-center p-4">
         <div className="bg-white rounded-2xl shadow-xl max-w-md w-full p-8 text-center">
           <CheckCircle className="size-16 text-green-500 mx-auto mb-4" />
-          <h1 className="text-2xl font-bold text-gray-900 mb-2">Thanh toán thành công!</h1>
-          <p className="text-gray-600 mb-4">Bạn đã nâng cấp lên gói Pro thành công.</p>
-          <p className="text-sm text-gray-500">Đang chuyển hướng về trang chủ...</p>
+          <h1 className="text-2xl font-bold text-gray-900 mb-2">
+            Thanh toán thành công!
+          </h1>
+          <p className="text-gray-600 mb-4">
+            Bạn đã nâng cấp lên gói Pro thành công.
+          </p>
+          <p className="text-sm text-gray-500">
+            Đang chuyển hướng về trang chủ...
+          </p>
         </div>
       </div>
     );
@@ -80,15 +85,21 @@ export function PaymentPage() {
       <div className="min-h-screen bg-gray-50 flex items-center justify-center p-4">
         <div className="bg-white rounded-2xl shadow-xl max-w-md w-full p-8 text-center">
           <QrCode className="size-16 text-[#F05123] mx-auto mb-4" />
-          <h1 className="text-2xl font-bold text-gray-900 mb-2">Quét mã QR để thanh toán</h1>
+          <h1 className="text-2xl font-bold text-gray-900 mb-2">
+            Quét mã QR để thanh toán
+          </h1>
           <p className="text-gray-600 mb-4">
-            Số tiền: {formatPrice(selectedPlan.price)}<br />
+            Số tiền: {formatPrice(selectedPlan.price)}
+            <br />
             Thời hạn: {selectedPlan.duration}
           </p>
           <div className="bg-gray-100 p-4 rounded-lg mb-4">
-            {/* Placeholder for QR code */}
-            <div className="w-48 h-48 bg-gray-300 mx-auto flex items-center justify-center text-gray-500">
-              QR Code Placeholder
+            <div className="mx-auto flex items-center justify-center">
+              <img
+                src="/qr-code.png"
+                alt="Payment QR Code"
+                className="w-48 h-48 object-contain shadow-sm rounded-md"
+              />
             </div>
           </div>
           <p className="text-sm text-gray-500 mb-4">
@@ -112,7 +123,9 @@ export function PaymentPage() {
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
           <div className="flex justify-between items-center h-16">
             <div className="flex items-center gap-2">
-              <div className="w-8 h-8 rounded-lg bg-[#F05123] flex items-center justify-center text-white font-bold">S</div>
+              <div className="w-8 h-8 rounded-lg bg-[#F05123] flex items-center justify-center text-white font-bold">
+                S
+              </div>
               <span className="font-semibold text-xl">Scorify</span>
             </div>
             <button
@@ -128,7 +141,9 @@ export function PaymentPage() {
       {/* Main Content */}
       <div className="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
         <div className="text-center mb-8">
-          <h1 className="text-3xl font-bold text-gray-900 mb-2">Nâng cấp lên gói Pro</h1>
+          <h1 className="text-3xl font-bold text-gray-900 mb-2">
+            Nâng cấp lên gói Pro
+          </h1>
           <p className="text-gray-600">Chọn gói phù hợp với nhu cầu của bạn</p>
         </div>
 
@@ -136,23 +151,29 @@ export function PaymentPage() {
           {plans.map((plan, index) => (
             <div
               key={index}
-              className="bg-white border border-gray-200 rounded-xl p-6 shadow-sm hover:shadow-md transition-shadow"
+              className="bg-white border border-gray-200 rounded-xl p-6 shadow-sm hover:shadow-md transition-shadow flex flex-col"
             >
               <div className="text-center mb-4">
-                <h3 className="text-xl font-semibold text-gray-900">{plan.duration}</h3>
+                <h3 className="text-xl font-semibold text-gray-900">
+                  {plan.duration}
+                </h3>
                 <div className="text-3xl font-bold text-[#F05123] mt-2">
                   {formatPrice(plan.price)}
                 </div>
-                {plan.savings > 0 && (
+
+                {plan.savings > 0 ? (
                   <div className="text-sm text-green-600 font-medium mt-1">
                     {plan.savingsText}
                   </div>
+                ) : (
+                  <div className="text-sm mt-1 invisible">Spacer</div>
                 )}
               </div>
+
               <ul className="space-y-2 mb-6">
                 <li className="flex items-center gap-2 text-sm text-gray-600">
                   <CheckCircle className="size-4 text-green-500" />
-                  Chấm bài không giới hạn
+                  60 lượt chấm bài/ngày
                 </li>
                 <li className="flex items-center gap-2 text-sm text-gray-600">
                   <CheckCircle className="size-4 text-green-500" />
@@ -163,9 +184,10 @@ export function PaymentPage() {
                   Hỗ trợ 24/7
                 </li>
               </ul>
+
               <button
                 onClick={() => handlePay(plan)}
-                className="w-full bg-[#F05123] text-white py-3 rounded-lg hover:bg-[#D9471E] transition-colors font-medium"
+                className="mt-auto w-full bg-[#F05123] text-white py-3 rounded-lg hover:bg-[#D9471E] transition-colors font-medium"
               >
                 Chọn gói này
               </button>
@@ -174,11 +196,15 @@ export function PaymentPage() {
         </div>
 
         <div className="mt-8 bg-blue-50 border border-blue-200 rounded-xl p-6">
-          <h3 className="text-lg font-semibold text-blue-900 mb-2">Lưu ý thanh toán</h3>
+          <h3 className="text-lg font-semibold text-blue-900 mb-2">
+            Lưu ý thanh toán
+          </h3>
           <ul className="text-sm text-blue-800 space-y-1">
             <li>• Thanh toán qua chuyển khoản ngân hàng</li>
             <li>• Quét mã QR để thực hiện thanh toán nhanh</li>
-            <li>• Sau khi thanh toán, tài khoản sẽ được nâng cấp ngay lập tức</li>
+            <li>
+              • Sau khi thanh toán, tài khoản sẽ được nâng cấp ngay lập tức
+            </li>
           </ul>
         </div>
       </div>
