@@ -4,7 +4,7 @@ import { GraduationCap, User, Mail, Lock, Calendar, School, Eye, EyeOff } from "
 
 export function SignUpPage() {
   const navigate = useNavigate();
-  const [role, setRole] = useState<"teacher" | "student">("teacher");
+  const [role, setRole] = useState<"teacher" | "student" | "admin">("teacher");
   const [showPassword, setShowPassword] = useState(false);
   const [showConfirmPassword, setShowConfirmPassword] = useState(false);
   const [formData, setFormData] = useState({
@@ -24,6 +24,8 @@ export function SignUpPage() {
     // Redirect based on selected role
     if (role === "student") {
       navigate("/student/dashboard");
+    } else if (role === "admin") {
+      navigate("/admin");
     } else {
       navigate("/dashboard");
     }
@@ -45,7 +47,7 @@ export function SignUpPage() {
         {/* Role Selection */}
         <div className="mb-6">
           <label className="block text-sm font-medium text-gray-700 mb-3">Chọn vai trò</label>
-          <div className="grid grid-cols-2 gap-4">
+          <div className="grid grid-cols-3 gap-4">
             <button
               type="button"
               onClick={() => setRole("teacher")}
@@ -84,6 +86,25 @@ export function SignUpPage() {
                 </div>
               </div>
             </button>
+            <button
+              type="button"
+              onClick={() => setRole("admin")}
+              className={`p-4 rounded-lg border-2 transition-all ${
+                role === "admin"
+                  ? "border-[#F05123] bg-orange-50"
+                  : "border-gray-200 hover:border-gray-300"
+              }`}
+            >
+              <div className="flex items-center gap-3">
+                <div className={`p-2 rounded-lg ${role === "admin" ? "bg-[#F05123]" : "bg-gray-200"}`}>
+                  <User className={`size-6 ${role === "admin" ? "text-white" : "text-gray-600"}`} />
+                </div>
+                <div className="text-left">
+                  <div className="font-semibold text-gray-900">Admin</div>
+                  <div className="text-sm text-gray-600">Quản lý hệ thống</div>
+                </div>
+              </div>
+            </button>
           </div>
         </div>
 
@@ -99,7 +120,6 @@ export function SignUpPage() {
               <input
                 type="text"
                 id="fullname"
-                required
                 value={formData.fullname}
                 onChange={(e) => setFormData({ ...formData, fullname: e.target.value })}
                 className="w-full pl-10 pr-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-[#F05123] focus:border-transparent"
@@ -118,7 +138,6 @@ export function SignUpPage() {
               <input
                 type="email"
                 id="email"
-                required
                 value={formData.email}
                 onChange={(e) => setFormData({ ...formData, email: e.target.value })}
                 className="w-full pl-10 pr-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-[#F05123] focus:border-transparent"
@@ -137,7 +156,6 @@ export function SignUpPage() {
               <input
                 type={showPassword ? "text" : "password"}
                 id="password"
-                required
                 value={formData.password}
                 onChange={(e) => setFormData({ ...formData, password: e.target.value })}
                 className="w-full pl-10 pr-12 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-[#F05123] focus:border-transparent"
@@ -163,7 +181,6 @@ export function SignUpPage() {
               <input
                 type={showConfirmPassword ? "text" : "password"}
                 id="confirmPassword"
-                required
                 value={formData.confirmPassword}
                 onChange={(e) => setFormData({ ...formData, confirmPassword: e.target.value })}
                 className="w-full pl-10 pr-12 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-[#F05123] focus:border-transparent"
@@ -189,7 +206,6 @@ export function SignUpPage() {
               <input
                 type="date"
                 id="birthday"
-                required
                 value={formData.birthday}
                 onChange={(e) => setFormData({ ...formData, birthday: e.target.value })}
                 className="w-full pl-10 pr-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-[#F05123] focus:border-transparent"
@@ -207,7 +223,6 @@ export function SignUpPage() {
               <input
                 type="text"
                 id="school"
-                required
                 value={formData.school}
                 onChange={(e) => setFormData({ ...formData, school: e.target.value })}
                 className="w-full pl-10 pr-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-[#F05123] focus:border-transparent"

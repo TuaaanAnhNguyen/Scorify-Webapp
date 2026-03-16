@@ -11,7 +11,10 @@ import { StudentClassesPage } from "./pages/student-classes-page";
 import { StudentClassDetailPage } from "./pages/student-class-detail-page";
 import { SubmitEssayPage } from "./pages/submit-essay-page";
 import { ViewEssayDetailPage } from "./pages/view-essay-detail-page";
+import { AdminDashboardPage } from "./pages/admin-dashboard-page";
+import { AdminTeachersPage } from "./pages/admin-teachers-page";
 import { Layout } from "./components/layout";
+import { AdminLayout } from "./components/admin-layout";
 
 export const router = createBrowserRouter([
   {
@@ -31,6 +34,15 @@ export const router = createBrowserRouter([
       { path: "student/classes/:id", Component: StudentClassDetailPage },
       { path: "student/classes/:id/submit/:assignmentId", Component: SubmitEssayPage },
       { path: "student/classes/:id/essay/:assignmentId/:submissionId", Component: ViewEssayDetailPage },
+    ],
+  },
+  {
+    path: "/admin",
+    Component: AdminLayout,
+    children: [
+      { index: true, Component: AdminDashboardPage },
+      { path: "teachers", Component: AdminTeachersPage },
+      { path: "teachers/create", Component: AdminTeachersPage },
     ],
   },
 ]);

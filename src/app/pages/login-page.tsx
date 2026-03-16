@@ -4,7 +4,7 @@ import { GraduationCap, Mail, Lock, Eye, EyeOff, User } from "lucide-react";
 
 export function LoginPage() {
   const navigate = useNavigate();
-  const [role, setRole] = useState<"teacher" | "student">("teacher");
+  const [role, setRole] = useState<"teacher" | "student" | "admin">("teacher");
   const [showPassword, setShowPassword] = useState(false);
   const [formData, setFormData] = useState({
     email: "",
@@ -19,6 +19,8 @@ export function LoginPage() {
     // Redirect based on selected role
     if (role === "student") {
       navigate("/student/dashboard");
+    } else if (role === "admin") {
+      navigate("/admin");
     } else {
       navigate("/dashboard");
     }
@@ -40,7 +42,7 @@ export function LoginPage() {
         {/* Role Selection */}
         <div className="mb-6">
           <label className="block text-sm font-medium text-gray-700 mb-3">Đăng nhập với vai trò</label>
-          <div className="grid grid-cols-2 gap-4">
+          <div className="grid grid-cols-3 gap-4">
             <button
               type="button"
               onClick={() => setRole("teacher")}
@@ -77,6 +79,24 @@ export function LoginPage() {
                 </div>
               </div>
             </button>
+            <button
+              type="button"
+              onClick={() => setRole("admin")}
+              className={`p-3 rounded-lg border-2 transition-all ${
+                role === "admin"
+                  ? "border-[#F05123] bg-orange-50"
+                  : "border-gray-200 hover:border-gray-300"
+              }`}
+            >
+              <div className="flex items-center gap-2">
+                <div className={`p-2 rounded-lg ${role === "admin" ? "bg-[#F05123]" : "bg-gray-200"}`}>
+                  <User className={`size-5 ${role === "admin" ? "text-white" : "text-gray-600"}`} />
+                </div>
+                <div className="text-left">
+                  <div className="font-semibold text-gray-900 text-sm">Admin</div>
+                </div>
+              </div>
+            </button>
           </div>
         </div>
 
@@ -92,7 +112,6 @@ export function LoginPage() {
               <input
                 type="text"
                 id="email"
-                required
                 value={formData.email}
                 onChange={(e) => setFormData({ ...formData, email: e.target.value })}
                 className="w-full pl-10 pr-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-[#F05123] focus:border-transparent"
@@ -111,7 +130,6 @@ export function LoginPage() {
               <input
                 type={showPassword ? "text" : "password"}
                 id="password"
-                required
                 value={formData.password}
                 onChange={(e) => setFormData({ ...formData, password: e.target.value })}
                 className="w-full pl-10 pr-12 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-[#F05123] focus:border-transparent"
