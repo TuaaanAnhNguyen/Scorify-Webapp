@@ -99,6 +99,13 @@ export function DashboardPage() {
                 <BookOpen className="size-5" />
                 Xem tất cả lớp
               </Link>
+              <Link
+                to="/payment"
+                className="bg-yellow-500 text-white px-6 py-3 rounded-lg hover:bg-yellow-600 transition-colors flex items-center gap-2 font-medium"
+              >
+                <TrendingUp className="size-5" />
+                Nâng cấp Pro
+              </Link>
             </div>
           </div>
         </div>

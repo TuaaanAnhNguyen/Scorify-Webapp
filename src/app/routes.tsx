@@ -13,6 +13,7 @@ import { SubmitEssayPage } from "./pages/submit-essay-page";
 import { ViewEssayDetailPage } from "./pages/view-essay-detail-page";
 import { AdminDashboardPage } from "./pages/admin-dashboard-page";
 import { AdminTeachersPage } from "./pages/admin-teachers-page";
+import { PaymentPage } from "./pages/payment-page";
 import { Layout } from "./components/layout";
 import { AdminLayout } from "./components/admin-layout";
 
@@ -34,6 +35,7 @@ export const router = createBrowserRouter([
       { path: "student/classes/:id", Component: StudentClassDetailPage },
       { path: "student/classes/:id/submit/:assignmentId", Component: SubmitEssayPage },
       { path: "student/classes/:id/essay/:assignmentId/:submissionId", Component: ViewEssayDetailPage },
+      { path: "payment", Component: PaymentPage },
     ],
   },
   {
