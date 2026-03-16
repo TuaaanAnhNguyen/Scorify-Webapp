@@ -1,4 +1,4 @@
-import { createBrowserRouter } from "react-router";
+import { createBrowserRouter } from "react-router-dom";
 import { LandingPage } from "./pages/landing-page";
 import { SignUpPage } from "./pages/signup-page";
 import { LoginPage } from "./pages/login-page";
@@ -16,6 +16,7 @@ import { AdminTeachersPage } from "./pages/admin-teachers-page";
 import { PaymentPage } from "./pages/payment-page";
 import { Layout } from "./components/layout";
 import { AdminLayout } from "./components/admin-layout";
+import { StudentGradingDetailPage } from "./pages/student-submission-detail-page";
 
 export const router = createBrowserRouter([
   {
@@ -29,12 +30,18 @@ export const router = createBrowserRouter([
       { path: "classes", Component: ClassesPage },
       { path: "classes/:id", Component: ClassDetailPage },
       { path: "classes/:id/create-exam", Component: CreateExamPage },
-      { path: "classes/:id/essay/:assignmentId/:submissionId", Component: ViewEssayDetailPage },
-      { path: "student/dashboard", Component: StudentDashboardPage },
-      { path: "student/classes", Component: StudentClassesPage },
-      { path: "student/classes/:id", Component: StudentClassDetailPage },
-      { path: "student/classes/:id/submit/:assignmentId", Component: SubmitEssayPage },
-      { path: "student/classes/:id/essay/:assignmentId/:submissionId", Component: ViewEssayDetailPage },
+
+      {
+        // This is the page with the Folder Upload and Student List
+        path: "classes/:id/essay/:assignmentId",
+        Component: ViewEssayDetailPage,
+      },
+      {
+        // This is the specific Math grading detail page
+        path: "classes/:id/essay/:assignmentId/:submissionId/detail",
+        Component: StudentGradingDetailPage,
+      },
+
       { path: "payment", Component: PaymentPage },
     ],
   },

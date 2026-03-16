@@ -1,4 +1,4 @@
-import { Link } from "react-router";
+import { Link } from "react-router-dom";
 import { GraduationCap, BookOpen, Users, BarChart3, Settings, LogOut, Plus, TrendingUp, Calendar, FileText } from "lucide-react";
 
 export function DashboardPage() {

@@ -1,5 +1,5 @@
 import { useState, useEffect } from "react";
-import { useNavigate } from "react-router";
+import { useNavigate } from "react-router-dom";
 import { CheckCircle, QrCode } from "lucide-react";
 import { getAdminTeachers, saveAdminTeachers } from "../utils/admin";
 

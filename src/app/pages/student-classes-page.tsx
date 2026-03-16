@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { Link } from "react-router";
+import { Link } from "react-router-dom";
 import { GraduationCap, BookOpen, Search, Plus, Settings, LogOut, Users, FileText, Clock } from "lucide-react";
 
 export function StudentClassesPage() {

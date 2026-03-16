@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { Link } from "react-router";
+import { Link } from "react-router-dom";
 import { GraduationCap, BookOpen, FileText, TrendingUp, Settings, LogOut, Plus, Calendar, Clock, CheckCircle, AlertCircle, Award } from "lucide-react";
 
 export function StudentDashboardPage() {

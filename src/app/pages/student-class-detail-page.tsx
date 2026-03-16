@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { Link, useParams } from "react-router";
+import { Link, useParams } from "react-router-dom";
 import { GraduationCap, BookOpen, Settings, LogOut, Calendar, CheckCircle, Clock, AlertCircle, Upload, FileText, Award, User, Bell } from "lucide-react";
 
 type Subject = "Toán" | "Sinh học" | "Vật lí";

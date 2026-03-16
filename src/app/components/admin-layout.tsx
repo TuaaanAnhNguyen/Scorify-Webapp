@@ -1,4 +1,4 @@
-import { Link, Outlet, useNavigate } from "react-router";
+import { Link, Outlet, useNavigate } from "react-router-dom";
 import { Home, Users, Book, LogOut } from "lucide-react";
 
 export function AdminLayout() {

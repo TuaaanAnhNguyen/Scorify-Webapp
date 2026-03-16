@@ -1,5 +1,5 @@
 import { ReactNode, useState } from "react";
-import { Link, useLocation, useParams } from "react-router";
+import { Link, useLocation, useNavigate, useParams } from "react-router-dom";
 import {
   GraduationCap,
   Settings,
@@ -7,14 +7,19 @@ import {
   ArrowLeft,
   Award,
   CheckCircle,
-  XCircle,
   AlertTriangle,
   BookOpen,
-  FileText,
-  Download,
   MessageSquare,
   TrendingUp,
   Calculator,
+  UploadCloud,
+  Info,
+  FolderUp,
+  Users,
+  ChevronRight,
+  Search,
+  Filter,
+  UserPlus,
 } from "lucide-react";
 
 type EssayDetailLayoutProps = {
@@ -22,6 +27,50 @@ type EssayDetailLayoutProps = {
   studentName: string;
   children: ReactNode;
 };
+
+const students = [
+  {
+    id: 1,
+    studentId: "HS001",
+    name: "Nguyễn Minh Anh",
+    score: 9.5,
+    status: "graded",
+    quickNote: "Tính toán chính xác, các bước biến đổi logic và rõ ràng.",
+  },
+  {
+    id: 2,
+    studentId: "HS002",
+    name: "Trần Hoàng Nam",
+    score: 7.0,
+    status: "graded",
+    quickNote: "Nắm được phương pháp nhưng còn nhầm lẫn dấu ở bước cuối.",
+  },
+  {
+    id: 3,
+    studentId: "HS003",
+    name: "Lê Thị Thu Thảo",
+    score: 8.5,
+    status: "graded",
+    quickNote:
+      "Trình bày tốt, tuy nhiên câu vận dụng cao chưa tối ưu cách giải.",
+  },
+  {
+    id: 4,
+    studentId: "HS004",
+    name: "Phạm Đức Anh",
+    score: 5.5,
+    status: "graded",
+    quickNote: "Sai kiến thức cơ bản về đạo hàm, cần xem lại công thức.",
+  },
+  {
+    id: 5,
+    studentId: "HS005",
+    name: "Vũ Hải Đăng",
+    score: 0,
+    status: "processing",
+    quickNote: "AI đang phân tích các bước giải...",
+  },
+];
 
 function TeacherEssayDetailLayout({
   classId,
@@ -146,7 +195,9 @@ function StudentEssayDetailLayout({
 }
 
 export function ViewEssayDetailPage() {
+  const navigate = useNavigate();
   const { id, assignmentId, submissionId } = useParams();
+
   const location = useLocation();
   const [activeTab, setActiveTab] = useState<
     "feedback" | "original" | "solution"
@@ -683,7 +734,7 @@ export function ViewEssayDetailPage() {
 
               <div className="flex items-center gap-6 text-sm text-gray-600">
                 <span>
-                  Nộp lúc:{" "}
+                  Nộp lúc:
                   {new Date(submissionData.submittedAt).toLocaleString()}
                 </span>
                 <span>•</span>
@@ -710,6 +761,50 @@ export function ViewEssayDetailPage() {
               </div>
               <div className="text-sm text-gray-600">AI đã chấm</div>
             </div>
+          </div>
+        </div>
+
+        <div className="bg-white rounded-xl shadow-sm border border-gray-100 p-8 mb-6">
+          <div className="flex items-center justify-between mb-6">
+            <div>
+              <h2 className="text-xl font-bold text-gray-900 flex items-center gap-2">
+                <FolderUp className="size-6 text-[#F05123]" />
+                Tải lên thư mục bài làm
+              </h2>
+            </div>
+          </div>
+
+          <div
+            className="border-2 border-dashed border-gray-200 rounded-xl p-12 flex flex-col items-center justify-center bg-gray-50 hover:bg-orange-50/50 hover:border-[#F05123]/30 transition-all cursor-pointer group"
+            onClick={() => document.getElementById("folder-upload")?.click()}
+          >
+            <div className="bg-white p-4 rounded-full shadow-sm mb-4 group-hover:scale-110 transition-transform">
+              <UploadCloud className="size-10 text-[#F05123]" />
+            </div>
+            <div className="text-center">
+              <p className="text-lg font-semibold text-gray-900">
+                Nhấn để chọn thư mục hoặc kéo thả vào đây
+              </p>
+              <p className="text-sm text-gray-500 mt-1">
+                Hỗ trợ các tệp .pdf, .jpg, .png trong thư mục
+              </p>
+            </div>
+            <input
+              type="file"
+              id="folder-upload"
+              className="hidden"
+              {...({ webkitdirectory: "", directory: "" } as any)}
+            />
+          </div>
+
+          <div className="mt-6 flex items-center gap-4 p-4 bg-blue-50 border border-blue-100 rounded-lg">
+            <div className="bg-blue-100 p-2 rounded-lg">
+              <Info className="size-5 text-blue-600" />
+            </div>
+            <p className="text-sm text-blue-800">
+              <strong>Lưu ý:</strong> AI sẽ tự động tách tên học sinh dựa trên
+              tên file hoặc nội dung bên trong để khởi tạo danh sách lớp.
+            </p>
           </div>
         </div>
 
@@ -808,134 +903,132 @@ export function ViewEssayDetailPage() {
           </div>
         </div>
 
-        {/* Detailed Problem-by-Problem Feedback */}
-        <div className="bg-white rounded-xl shadow-sm border border-gray-100">
-          <div className="p-6 border-b border-gray-100">
-            <h2 className="text-xl font-bold text-gray-900 flex items-center gap-2">
-              <FileText className="size-6 text-[#F05123]" />
-              Nhận xét chi tiết theo từng câu
-            </h2>
+        <div className="bg-white rounded-xl shadow-sm border border-gray-100 overflow-hidden">
+          <div className="p-6 border-b border-gray-100 flex flex-col md:flex-row md:items-center justify-between gap-4">
+            <div>
+              <h2 className="text-xl font-bold text-gray-900 flex items-center gap-2">
+                <Users className="size-6 text-[#F05123]" />
+                Danh sách chấm điểm học sinh
+              </h2>
+              <p className="text-sm text-gray-500 mt-1">
+                AI đã tự động nhận diện {students.length} học sinh từ thư mục
+                tải lên.
+              </p>
+            </div>
+
+            <div className="flex items-center gap-3">
+              <div className="relative">
+                <Search className="size-4 absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" />
+                <input
+                  type="text"
+                  placeholder="Tìm tên học sinh..."
+                  className="pl-9 pr-4 py-2 border border-gray-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-orange-500/20 focus:border-[#F05123]"
+                />
+              </div>
+              <button className="p-2 border border-gray-200 rounded-lg hover:bg-gray-50 text-gray-600">
+                <Filter className="size-5" />
+              </button>
+            </div>
           </div>
 
-          <div className="p-6">
-            <div className="space-y-6">
-              {detailedFeedback.map((problem) => (
-                <div
-                  key={problem.id}
-                  className="border border-gray-200 rounded-lg overflow-hidden"
-                >
-                  {/* Problem Header */}
-                  <div
-                    className={`p-4 ${problem.isCorrect ? "bg-green-50" : problem.points >= problem.maxPoints * 0.5 ? "bg-yellow-50" : "bg-red-50"}`}
+          <div className="overflow-x-auto">
+            <table className="w-full text-left">
+              <thead className="bg-gray-50 border-b border-gray-100">
+                <tr>
+                  <th className="px-6 py-4 text-xs font-semibold text-gray-500 uppercase">
+                    Học sinh
+                  </th>
+                  <th className="px-6 py-4 text-xs font-semibold text-gray-500 uppercase text-center">
+                    Trạng thái
+                  </th>
+                  <th className="px-6 py-4 text-xs font-semibold text-gray-500 uppercase text-center">
+                    Điểm số
+                  </th>
+                  <th className="px-6 py-4 text-xs font-semibold text-gray-500 uppercase">
+                    Nhận xét nhanh
+                  </th>
+                  <th className="px-6 py-4 text-xs font-semibold text-gray-500 uppercase text-right">
+                    Hành động
+                  </th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-gray-100">
+                {students.map((student) => (
+                  <tr
+                    key={student.id}
+                    className="hover:bg-orange-50/30 transition-colors cursor-pointer group"
+                    onClick={() =>
+                      navigate(
+                        `/classes/${id}/essay/${assignmentId}/${student.id}/detail`,
+                      )
+                    }
                   >
-                    <div className="flex items-center justify-between">
+                    <td className="px-6 py-4">
                       <div className="flex items-center gap-3">
-                        {problem.isCorrect ? (
-                          <CheckCircle className="size-6 text-green-600" />
-                        ) : problem.points >= problem.maxPoints * 0.5 ? (
-                          <AlertTriangle className="size-6 text-yellow-600" />
-                        ) : (
-                          <XCircle className="size-6 text-red-600" />
-                        )}
+                        <div className="size-10 bg-orange-100 rounded-full flex items-center justify-center text-[#D9471E] font-bold">
+                          {student.name.split(" ").pop()?.charAt(0)}
+                        </div>
                         <div>
-                          <h3 className="font-semibold text-gray-900">
-                            {problem.problemNumber}
-                          </h3>
-                          <p className="text-sm text-gray-700">
-                            {problem.question}
-                          </p>
-                        </div>
-                      </div>
-                      <div className="text-right">
-                        <div
-                          className={`text-2xl font-bold ${problem.isCorrect ? "text-green-600" : problem.points >= problem.maxPoints * 0.5 ? "text-yellow-600" : "text-red-600"}`}
-                        >
-                          {problem.points}/{problem.maxPoints}
-                        </div>
-                        <div className="text-xs text-gray-600">điểm</div>
-                      </div>
-                    </div>
-                  </div>
-
-                  {/* Problem Content */}
-                  <div className="p-6">
-                    {/* Your Answer */}
-                    <div className="mb-4">
-                      <h4 className="text-sm font-semibold text-gray-700 mb-2">
-                        Bài làm của bạn:
-                      </h4>
-                      <div className="bg-gray-50 rounded-lg p-4 font-mono text-gray-900 border border-gray-200">
-                        {problem.studentAnswer}
-                      </div>
-                    </div>
-
-                    {/* Correct Answer */}
-                    {!problem.isCorrect && (
-                      <div className="mb-4">
-                        <h4 className="text-sm font-semibold text-gray-700 mb-2">
-                          Đáp án đúng:
-                        </h4>
-                        <div className="bg-green-50 rounded-lg p-4 font-mono text-green-900 border border-green-200">
-                          {problem.correctAnswer}
-                        </div>
-                      </div>
-                    )}
-
-                    {/* AI Feedback */}
-                    <div className="mb-4 bg-blue-50 border border-blue-200 rounded-lg p-4">
-                      <h4 className="text-sm font-semibold text-blue-900 mb-2">
-                        Nhận xét từ AI:
-                      </h4>
-                      <p className="text-sm text-gray-700">
-                        {problem.feedback}
-                      </p>
-                    </div>
-
-                    {/* Step-by-Step Analysis */}
-                    <div>
-                      <h4 className="text-sm font-semibold text-gray-900 mb-3">
-                        Phân tích từng bước:
-                      </h4>
-                      <div className="space-y-3">
-                        {problem.steps.map((step, index) => (
-                          <div
-                            key={index}
-                            className={`flex items-start gap-3 p-3 rounded-lg border ${step.isCorrect ? "bg-green-50 border-green-200" : "bg-red-50 border-red-200"}`}
-                          >
-                            <div className="flex-shrink-0 mt-1">
-                              {step.isCorrect ? (
-                                <CheckCircle className="size-5 text-green-600" />
-                              ) : (
-                                <XCircle className="size-5 text-red-600" />
-                              )}
-                            </div>
-                            <div className="flex-1">
-                              <div className="font-medium text-gray-900 text-sm mb-1">
-                                Bước {index + 1}: {step.step}
-                              </div>
-                              <div className="text-sm text-gray-700 mb-1">
-                                Bài làm:{" "}
-                                <span className="font-mono bg-white px-2 py-0.5 rounded">
-                                  {step.studentWork}
-                                </span>
-                              </div>
-                              <div className="text-sm text-gray-600">
-                                {step.explanation}
-                              </div>
-                            </div>
+                          <div className="font-medium text-gray-900">
+                            {student.name}
                           </div>
-                        ))}
+                          <div className="text-xs text-gray-500">
+                            ID: {student.studentId}
+                          </div>
+                        </div>
                       </div>
-                    </div>
-                  </div>
-                </div>
-              ))}
-            </div>
+                    </td>
+                    <td className="px-6 py-4">
+                      <div className="flex justify-center">
+                        <span
+                          className={`px-3 py-1 rounded-full text-xs font-medium ${
+                            student.status === "graded"
+                              ? "bg-green-100 text-green-700"
+                              : "bg-blue-100 text-blue-700"
+                          }`}
+                        >
+                          {student.status === "graded"
+                            ? "Đã chấm xong"
+                            : "Đang xử lý"}
+                        </span>
+                      </div>
+                    </td>
+                    <td className="px-6 py-4">
+                      <div
+                        className={`text-center font-bold text-lg ${getGradeColor(student.score)}`}
+                      >
+                        {student.score.toFixed(1)}
+                      </div>
+                    </td>
+                    <td className="px-6 py-4">
+                      <p className="text-sm text-gray-600 max-w-xs truncate italic">
+                        "{student.quickNote}"
+                      </p>
+                    </td>
+                    <td className="px-6 py-4 text-right">
+                      <div className="flex items-center justify-end gap-2">
+                        <span className="text-sm font-medium text-[#F05123] opacity-0 group-hover:opacity-100 transition-opacity">
+                          Xem chi tiết
+                        </span>
+                        <ChevronRight className="size-5 text-gray-400 group-hover:text-[#F05123]" />
+                      </div>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+
+          <div className="p-4 bg-gray-50 border-t border-gray-100 text-center">
+            <button className="text-sm font-medium text-gray-600 hover:text-[#F05123] flex items-center gap-2 mx-auto">
+              <UserPlus className="size-4" />
+              Thêm học sinh thủ công
+            </button>
           </div>
         </div>
 
         {/* Action Buttons */}
-        <div className="bg-white rounded-xl shadow-sm border border-gray-100 p-6 mt-6">
+        {/* <div className="bg-white rounded-xl shadow-sm border border-gray-100 p-6 mt-6">
           <div className="flex items-center justify-between">
             <button className="flex items-center gap-2 text-[#F05123] hover:text-[#D9471E] font-medium">
               <Download className="size-5" />
@@ -953,7 +1046,7 @@ export function ViewEssayDetailPage() {
               </button>
             </div>
           </div>
-        </div>
+        </div> */}
       </>
     );
   }

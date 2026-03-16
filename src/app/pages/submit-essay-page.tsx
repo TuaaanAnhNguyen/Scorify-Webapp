@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { Link, useParams, useNavigate } from "react-router";
+import { Link, useParams, useNavigate } from "react-router-dom";
 import { GraduationCap, Settings, LogOut, ArrowLeft, Upload, X, FileText, Image as ImageIcon, CheckCircle } from "lucide-react";
 
 export function SubmitEssayPage() {
