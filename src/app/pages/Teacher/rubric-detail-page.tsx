@@ -25,15 +25,15 @@ import {
 } from "@/app/components/ui/table";
 
 const MOCK_SUBMISSIONS = [
-  { id: "s-1", studentName: "Nguyễn Văn An", className: "Lớp 12A3", score: 8.5, date: "17/06/2026", status: "Chấm xong" },
-  { id: "s-2", studentName: "Lê Hoàng Minh", className: "Lớp 12A3", score: 6.0, date: "17/06/2026", status: "Chấm xong" },
-  { id: "s-3", studentName: "Trần Thị Hồng", className: "Lớp 10 L1", score: 9.2, date: "16/06/2026", status: "Chấm xong" },
-  { id: "s-4", studentName: "Phạm Minh Đức", className: "Lớp 11B5", score: 7.4, date: "15/06/2026", status: "Chấm xong" },
-  { id: "s-5", studentName: "Đặng Hoàng Việt", className: "Lớp 12A3", score: 8.0, date: "14/06/2026", status: "Chấm xong" },
+  { id: "s-1", studentName: "Nguyễn Văn An", classId: "c-1", className: "Lớp 12A3", score: 8.5, date: "17/06/2026", status: "Chấm xong" },
+  { id: "s-2", studentName: "Lê Hoàng Minh", classId: "c-1", className: "Lớp 12A3", score: 6.0, date: "17/06/2026", status: "Chấm xong" },
+  { id: "s-3", studentName: "Trần Thị Hồng", classId: "c-2", className: "Lớp 10 L1", score: 9.2, date: "16/06/2026", status: "Chấm xong" },
+  { id: "s-4", studentName: "Phạm Minh Đức", classId: "c-3", className: "Lớp 11B5", score: 7.4, date: "15/06/2026", status: "Chấm xong" },
+  { id: "s-5", studentName: "Đặng Hoàng Việt", classId: "c-1", className: "Lớp 12A3", score: 8.0, date: "14/06/2026", status: "Chấm xong" },
 ];
 
 export function RubricDetailPage() {
-  const { id } = useParams();
+  const { id: rubricId } = useParams();
   const navigate = useNavigate();
   
   const [rubric, setRubric] = React.useState<any>(null);
@@ -42,13 +42,13 @@ export function RubricDetailPage() {
     const saved = localStorage.getItem("scorify_mock_rubrics");
     if (saved) {
       const list = JSON.parse(saved);
-      const item = list.find((r: any) => r.id === id);
+      const item = list.find((r: any) => r.id === rubricId);
       if (item) {
         setRubric(item);
       } else {
         // Fallback for demo
         setRubric({
-          id,
+          id: rubricId,
           title: "Đề khảo sát Đột phá Hình học Giải tích Không gian",
           grade: "Lớp 12",
           examFileName: "De_thi_Toan_HK2_Khoi12.pdf",
@@ -57,7 +57,7 @@ export function RubricDetailPage() {
         });
       }
     }
-  }, [id]);
+  }, [rubricId]);
 
   if (!rubric) return null;
 
@@ -88,7 +88,7 @@ export function RubricDetailPage() {
           </div>
         </div>
 
-        <Link to={`/rubrics/${id}/edit`}>
+        <Link to={`/rubrics/${rubricId}/edit`}>
           <Button variant="outline" className="text-xs font-bold rounded-xl h-10 px-4 border-slate-200">
             Chỉnh sửa bài tập
           </Button>
@@ -176,9 +176,13 @@ export function RubricDetailPage() {
             </TableHeader>
             <TableBody>
               {MOCK_SUBMISSIONS.map((sub) => (
-                <TableRow key={sub.id} className="hover:bg-slate-50/40 text-xs">
+                <TableRow 
+                  key={sub.id} 
+                  className="hover:bg-slate-50/40 text-xs cursor-pointer group"
+                  onClick={() => navigate(`/classrooms/${sub.classId}/assignments/a-1/grading?from=rubric&rubricId=${rubricId}`)}
+                >
                   <TableCell className="font-bold text-slate-800 px-6 flex items-center gap-2 py-4">
-                    <div className="size-7 rounded-full bg-slate-100 flex items-center justify-center text-slate-400 shrink-0">
+                    <div className="size-7 rounded-full bg-slate-100 flex items-center justify-center text-slate-400 shrink-0 group-hover:bg-indigo-100 group-hover:text-indigo-600 transition-colors">
                       <User className="size-3.5" />
                     </div>
                     {sub.studentName}
