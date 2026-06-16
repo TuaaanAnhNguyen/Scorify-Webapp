@@ -1,7 +1,7 @@
 // src/app/pages/Teacher/ai-grading-page.tsx
 
 import { useState } from "react";
-import { useParams, useNavigate } from "react-router-dom";
+import { useParams, useNavigate, useLocation } from "react-router-dom";
 import {
   ArrowLeft,
   Undo2,
@@ -83,11 +83,19 @@ const MOCK_AI_GRADES = {
 export function AIGradingPage() {
   const { classId, id } = useParams();
   const navigate = useNavigate();
+  const location = useLocation();
 
   // Local state holding the evaluation data to allow manual override editing
   const [evaluation, setEvaluation] = useState(MOCK_AI_GRADES);
   const [hoveredAnomalyId, setHoveredAnomalyId] = useState<string | null>(null);
   const [isSaving, setIsSaving] = useState(false);
+
+  const handleBack = () => {
+    // Luôn quay trở lại trang trước đó trong lịch sử trình duyệt
+    // Điều này đảm bảo nếu user đến từ trang Chi tiết Bài tập thì sẽ về trang đó,
+    // còn nếu đến từ trang Lớp học thì sẽ về trang Lớp học.
+    navigate(-1);
+  };
 
   // Core function handling teacher's numeric score modification
   const handleScoreChange = (criterionId: string, newScoreStr: string) => {
@@ -131,7 +139,7 @@ export function AIGradingPage() {
     setTimeout(() => {
       setIsSaving(false);
       toast.success("Đã phê duyệt và lưu bảng điểm chỉnh sửa thành công!");
-      navigate(`/classrooms/${classId}`);
+      handleBack();
     }, 800);
   };
 
@@ -143,7 +151,7 @@ export function AIGradingPage() {
           <Button
             variant="ghost"
             size="icon"
-            onClick={() => navigate(`/classrooms/${classId}`)}
+            onClick={handleBack}
             className="rounded-xl border border-slate-100 bg-white size-9 shadow-sm"
           >
             <ArrowLeft className="size-4 text-slate-600" />

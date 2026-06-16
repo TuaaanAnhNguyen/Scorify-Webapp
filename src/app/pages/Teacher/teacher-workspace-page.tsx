@@ -22,7 +22,7 @@ export function WorkspacePage() {
   // Updated metrics reflecting the Classroom/Assignment framework
   const stats = [
     { label: "Lớp học đang quản lý", value: "3 lớp", icon: School, color: "text-indigo-600 bg-indigo-50 border border-indigo-100" },
-    { label: "Ma trận tiêu chí (Rubrics)", value: "14 bộ", icon: Binary, color: "text-amber-600 bg-amber-50 border border-amber-100" },
+    { label: "Quản lý bài tập", value: "14 bộ", icon: Binary, color: "text-amber-600 bg-amber-50 border border-amber-100" },
     { label: "Tổng số bài đã chấm AI", value: "1,240 bài", icon: FileText, color: "text-emerald-600 bg-emerald-50 border border-emerald-100" },
   ];
 

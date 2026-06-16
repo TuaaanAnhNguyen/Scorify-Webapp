@@ -1,7 +1,5 @@
-// src/app/pages/Teacher/create-assignment-page.tsx
-
-import { useState } from "react";
-import { useNavigate } from "react-router-dom";
+import * as React from "react";
+import { useNavigate, useParams } from "react-router-dom";
 import { FolderPlus, ArrowLeft, Binary, FileSpreadsheet, Sparkles } from "lucide-react";
 import { Button } from "@/app/components/ui/button";
 import { Input } from "@/app/components/ui/input";
@@ -11,12 +9,19 @@ import { toast } from "sonner";
 
 export function CreateAssignmentPage() {
   const navigate = useNavigate();
-  const [folderName, setFolderName] = useState("");
-  const [grade, setGrade] = useState("Lớp 12");
-  const [selectedRubricId, setSelectedRubricId] = useState("");
+  const { classId } = useParams();
+  const [folderName, setFolderName] = React.useState("");
+  const [grade, setGrade] = React.useState("Lớp 12");
+  const [selectedRubricId, setSelectedRubricId] = React.useState("");
 
   // Retrieve existing master rubrics
-  const savedRubrics = JSON.parse(localStorage.getItem("scorify_mock_rubrics") || "[]");
+  const savedRubrics = React.useMemo(() => {
+    try {
+      return JSON.parse(localStorage.getItem("scorify_mock_rubrics") || "[]");
+    } catch (e) {
+      return [];
+    }
+  }, []);
 
   const handleSave = () => {
     if (!folderName.trim()) {
@@ -24,13 +29,13 @@ export function CreateAssignmentPage() {
       return;
     }
     if (!selectedRubricId) {
-      toast.error("Vui lòng gán một ma trận đáp án/rubric duy nhất cho thư mục này!");
+      toast.error("Vui lòng gán một đề thi/đáp án duy nhất cho thư mục này!");
       return;
     }
 
     // Resolve target rubric details
     const activeRubric = savedRubrics.find((r: any) => r.id === selectedRubricId) || {
-      title: "Mẫu đáp án trắc nghiệm chuẩn tự luận"
+      title: "Mẫu đề thi trắc nghiệm chuẩn tự luận"
     };
 
     const existingFolders = JSON.parse(localStorage.getItem("scorify_mock_folders") || "[]");
@@ -47,14 +52,19 @@ export function CreateAssignmentPage() {
 
     localStorage.setItem("scorify_mock_folders", JSON.stringify([newFolder, ...existingFolders]));
     toast.success(`Đã tạo thành công thư mục "${folderName}"!`);
-    navigate("/folders");
+    navigate(classId ? `/classrooms/${classId}` : "/classrooms");
   };
 
   return (
     <div className="max-w-2xl mx-auto space-y-6 animate-in fade-in duration-200">
       {/* Back button and title strip */}
       <div className="flex items-center gap-3">
-        <Button variant="ghost" size="icon" onClick={() => navigate("/folders")} className="rounded-xl border border-slate-100 bg-white shadow-sm size-9">
+        <Button 
+          variant="ghost" 
+          size="icon" 
+          onClick={() => navigate(classId ? `/classrooms/${classId}` : "/classrooms")} 
+          className="rounded-xl border border-slate-100 bg-white shadow-sm size-9"
+        >
           <ArrowLeft className="size-4 text-slate-600" />
         </Button>
         <div>
@@ -82,7 +92,7 @@ export function CreateAssignmentPage() {
           <div className="space-y-1.5">
             <label className="text-xs font-bold text-slate-500 uppercase tracking-wider">Phân loại khối lớp</label>
             <Select value={grade} onValueChange={setGrade}>
-              <SelectTrigger className="h-11 text-xs rounded-xl border-slate-200 bg-white">
+              <SelectTrigger className="h-11 rounded-xl text-xs border-slate-200 bg-white">
                 <SelectValue placeholder="Chọn khối lớp" />
               </SelectTrigger>
               <SelectContent className="rounded-xl text-xs">
@@ -100,16 +110,16 @@ export function CreateAssignmentPage() {
                 <FileSpreadsheet className="size-4" />
               </div>
               <div>
-                <h4 className="text-xs font-bold text-slate-900 tracking-tight">Ràng buộc Đáp án áp dụng (Duy nhất)</h4>
+                <h4 className="text-xs font-bold text-slate-900 tracking-tight">Gán Đề thi & Đáp án áp dụng</h4>
                 <p className="text-[11px] text-slate-500 leading-normal mt-0.5">
-                  Hệ thống AI Scorify yêu cầu cố định duy nhất một biểu điểm đáp án cho toàn bộ các bài làm được đẩy vào thư mục này. Tránh gộp chung nhiều đề thi khác nhau.
+                  Hệ thống AI Scorify yêu cầu cố định duy nhất một đề thi/đáp án cho toàn bộ các bài làm được đẩy vào thư mục này. Tránh gộp chung nhiều đề thi khác nhau.
                 </p>
               </div>
             </div>
 
             <Select value={selectedRubricId} onValueChange={setSelectedRubricId}>
               <SelectTrigger className="h-10 text-xs rounded-xl border-slate-200 bg-white shadow-sm">
-                <SelectValue placeholder="-- Nhấp để chọn ma trận đáp án bài thi --" />
+                <SelectValue placeholder="-- Nhấp để chọn đề thi/đáp án --" />
               </SelectTrigger>
               <SelectContent className="rounded-xl text-xs">
                 {savedRubrics.length > 0 ? (
@@ -130,7 +140,7 @@ export function CreateAssignmentPage() {
 
           {/* Action Footer Buttons inside form */}
           <div className="flex items-center justify-end gap-2 border-t border-slate-100 pt-4 mt-2">
-            <Button variant="ghost" type="button" onClick={() => navigate("/folders")} className="text-xs font-bold rounded-xl h-10 px-4">
+            <Button variant="ghost" type="button" onClick={() => navigate(classId ? `/classrooms/${classId}` : "/classrooms")} className="text-xs font-bold rounded-xl h-10 px-4">
               Hủy bỏ
             </Button>
             <Button type="button" onClick={handleSave} className="bg-indigo-600 hover:bg-indigo-700 text-white font-bold text-xs h-10 px-5 rounded-xl shadow-md flex items-center gap-1.5">

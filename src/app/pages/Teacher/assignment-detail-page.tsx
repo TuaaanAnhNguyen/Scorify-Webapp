@@ -111,7 +111,7 @@ export function AssignmentDetailPage() {
             
             <p className="text-xs text-slate-400 font-medium flex items-center gap-1.5 mt-0.5">
               <Binary className="size-3.5 text-indigo-500" />
-              Đáp án áp dụng duy nhất cho tập hồ sơ này: <span className="text-slate-700 font-bold underline decoration-indigo-300">{assignment.rubricName}</span>
+              Đề thi & Đáp án áp dụng cho bài tập này: <span className="text-slate-700 font-bold underline decoration-indigo-300">{assignment.rubricName}</span>
             </p>
           </div>
         </div>
@@ -157,7 +157,7 @@ export function AssignmentDetailPage() {
           <div className="bg-indigo-50/40 border border-indigo-100 rounded-xl p-3.5 text-[11px] text-indigo-950 flex gap-2.5">
             <Layers className="size-4 text-indigo-500 shrink-0 mt-0.5" />
             <p className="leading-normal">
-              <strong>Mẹo chấm bài:</strong> Hệ thống tự động căn lề văn bản, nhận diện chữ viết viết tay tiếng Việt và tính điểm tự động dựa chính xác trên barem điểm của <strong>{assignment.rubricName}</strong>.
+              <strong>Mẹo chấm bài:</strong> Hệ thống tự động căn lề văn bản, nhận diện chữ viết viết tay tiếng Việt và tính điểm tự động dựa chính xác trên biểu điểm của <strong>{assignment.rubricName}</strong>.
             </p>
           </div>
         </div>

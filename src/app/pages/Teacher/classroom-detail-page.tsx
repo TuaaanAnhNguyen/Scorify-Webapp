@@ -294,7 +294,7 @@ export function ClassroomDetailScreen() {
                   <div className="flex items-center gap-1.5 mt-1">
                     <Binary className="size-3 text-slate-400 shrink-0" />
                     <span className="text-[10px] text-slate-500 truncate font-medium">
-                      Barem đáp án: {assignment.rubricName}
+                      Đề thi & Đáp án: {assignment.rubricName}
                     </span>
                   </div>
                 </div>
