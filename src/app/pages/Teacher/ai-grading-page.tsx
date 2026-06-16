@@ -4,7 +4,6 @@ import { useState } from "react";
 import { useParams, useNavigate, useLocation } from "react-router-dom";
 import {
   ArrowLeft,
-  Undo2,
   CheckCircle2,
   AlertTriangle,
   RotateCcw,
@@ -12,8 +11,6 @@ import {
   Save,
   Cpu,
   Eye,
-  Plus,
-  Minus,
   MessageSquare,
 } from "lucide-react";
 import { Button } from "@/app/components/ui/button";
@@ -22,13 +19,18 @@ import { Input } from "@/app/components/ui/input";
 import { Textarea } from "@/app/components/ui/textarea";
 import { toast } from "sonner";
 
+// --- NEW IMPORTS FOR LATEX RENDERING ---
+import ReactMarkdown from "react-markdown";
+import remarkMath from "remark-math";
+import rehypeKatex from "rehype-katex";
+import "katex/dist/katex.min.css"; // Ensure math styles render perfectly
+
 const MOCK_AI_GRADES = {
   studentName: "Nguyễn Văn An",
   studentId: "STU-001",
   assignmentName: "Kiểm tra Tập hợp & Bất phương trình bậc nhất",
   totalScore: 7.5,
   aiConfidence: "94%",
-  // Bounding box coordinates normalized to percentages for scaling over any container size
   anomalies: [
     {
       id: "err-1",
@@ -53,8 +55,9 @@ const MOCK_AI_GRADES = {
       name: "1. Trình bày lý thuyết & Điều kiện xác định",
       aiScore: 1.5,
       maxScore: 2.0,
+      // Added sample markdown math block below
       aiFeedback:
-        "Xác định tập nghiệm cơ bản đúng, nhưng thiếu điều kiện mẫu thức ở câu mẫu số phụ.",
+        "Xác định tập nghiệm cơ bản đúng, nhưng thiếu điều kiện mẫu thức ở câu mẫu số phụ. Cần bổ sung điều kiện $x \\neq 2$.",
       isOverridden: false,
     },
     {
@@ -63,7 +66,7 @@ const MOCK_AI_GRADES = {
       aiScore: 4.0,
       maxScore: 5.0,
       aiFeedback:
-        "Biến đổi tương đương chính xác cho đến bước quy đồng. Bị sai dấu ở bước chuyển vế bất phương trình câu 2b.",
+        "Biến đổi tương đương chính xác cho đến bước quy đồng. Bị sai dấu ở bước chuyển vế bất phương trình câu 2b:\n\n$$\\frac{x+2}{2-x} \\leq 1$$",
       isOverridden: false,
     },
     {
@@ -72,32 +75,32 @@ const MOCK_AI_GRADES = {
       aiScore: 2.0,
       maxScore: 3.0,
       aiFeedback:
-        "Do sai hệ quả dấu ở phần biến đổi dẫn đến tập nghiệm cuối cùng bị lệch khoảng.",
+        "Do sai hệ quả dấu ở phần biến đổi dẫn đến tập nghiệm cuối cùng bị lệch khoảng. Kết quả đúng phải là $S = (-1; 2]$.",
       isOverridden: false,
     },
   ],
   generalComment:
-    "Học sinh hiểu cách giải bài toán bất phương trình. Tuy nhiên kỹ năng tính toán biến đổi dấu còn cẩu thả. Cần rèn luyện thêm bài tập chuyển vế đổi dấu.",
+    "Học sinh hiểu cách giải bài toán bất phương trình. Tuy nhiên kỹ năng tính toán biến đổi dấu còn cẩu thả. Cần rèn luyện thêm bài tập hệ thức $$ax^2 + bx + c = 0$$.",
 };
 
 export function AIGradingPage() {
-  const { classId, id } = useParams();
+  // const { classId, id } = useParams();
   const navigate = useNavigate();
-  const location = useLocation();
 
-  // Local state holding the evaluation data to allow manual override editing
   const [evaluation, setEvaluation] = useState(MOCK_AI_GRADES);
   const [hoveredAnomalyId, setHoveredAnomalyId] = useState<string | null>(null);
   const [isSaving, setIsSaving] = useState(false);
 
+  // --- NEW STATE: Tracks which comment fields are currently in text edit mode ---
+  const [editingCriterionId, setEditingCriterionId] = useState<string | null>(
+    null,
+  );
+  const [editingGeneral, setEditingGeneral] = useState(false);
+
   const handleBack = () => {
-    // Luôn quay trở lại trang trước đó trong lịch sử trình duyệt
-    // Điều này đảm bảo nếu user đến từ trang Chi tiết Bài tập thì sẽ về trang đó,
-    // còn nếu đến từ trang Lớp học thì sẽ về trang Lớp học.
     navigate(-1);
   };
 
-  // Core function handling teacher's numeric score modification
   const handleScoreChange = (criterionId: string, newScoreStr: string) => {
     const updatedCriteria = evaluation.criteria.map((crit) => {
       if (crit.id === criterionId) {
@@ -109,7 +112,6 @@ export function AIGradingPage() {
       return crit;
     });
 
-    // Recalculate total score dynamically on the fly
     const nextTotalScore = updatedCriteria.reduce(
       (sum, c) => sum + c.aiScore,
       0,
@@ -122,7 +124,6 @@ export function AIGradingPage() {
     });
   };
 
-  // Handler for teacher editing written feedback segments
   const handleFeedbackChange = (criterionId: string, txt: string) => {
     setEvaluation({
       ...evaluation,
@@ -144,7 +145,7 @@ export function AIGradingPage() {
   };
 
   return (
-    <div className="space-y-4 animate-in fade-in duration-300">
+    <div className="space-y-4 animate-in fade-in duration-300 p-4">
       {/* Top Action Ribbon Bar */}
       <div className="flex items-center justify-between border-b border-slate-100 pb-3">
         <div className="flex items-center gap-3">
@@ -191,225 +192,177 @@ export function AIGradingPage() {
       <div className="grid lg:grid-cols-2 gap-5 h-[calc(100vh-180px)] min-h-[550px]">
         {/* ==================== LEFT HALF: SPATIAL CANVAS COMPONENT ==================== */}
         <div className="bg-slate-900 rounded-2xl border border-slate-800 flex flex-col items-center justify-center relative overflow-hidden group/canvas shadow-inner">
-          {/* Diagnostic Overlay HUD Header Info */}
           <div className="absolute top-3 left-3 right-3 z-20 flex items-center justify-between pointer-events-none">
             <Badge className="bg-slate-950/80 backdrop-blur text-indigo-400 border border-slate-800 font-mono text-[10px] gap-1 px-2 py-1">
               <Eye className="size-3" /> CANVAS_VIEWER_MODE // MATH_OCR
             </Badge>
-            <div className="flex items-center gap-1.5">
-              {evaluation.anomalies.map((anom) => (
-                <Badge
-                  key={anom.id}
-                  className={`transition-all border font-bold text-[10px] uppercase duration-200 ${
-                    hoveredAnomalyId === anom.id
-                      ? "bg-rose-500 text-white border-rose-400 scale-105"
-                      : "bg-slate-950/80 backdrop-blur text-rose-400 border-rose-900/50"
-                  }`}
-                >
-                  {anom.id}
-                </Badge>
-              ))}
-            </div>
           </div>
 
-          {/* Core Image Wrapping Canvas Area */}
-          <div className="relative w-full max-w-[420px] aspect-[3/4] bg-white rounded-lg shadow-2xl overflow-hidden border border-white/10 m-6">
-            {/* Mock Handwriting Exam sheet background graphic simulation layout */}
-            <div className="absolute inset-0 p-8 text-slate-700 font-serif space-y-6 select-none bg-amber-50/20 opacity-90 pattern-grid relative z-10 pointer-events-none">
-              <div className="border-b-2 border-dashed border-indigo-100 pb-2">
-                <span className="font-bold text-xs font-sans text-slate-400 block mb-4">
-                  BÀI LÀM TỰ LUẬN TOÁN
-                </span>
-                <p className="text-sm italic font-semibold text-indigo-950">
-                  Bài 1: Giải bất phương trình (2x - 4)/(x - 1) ≤ 1
-                </p>
-                <p className="text-xs mt-2 text-slate-600 font-mono">
-                  Điều kiện xác định: x ≥ 0{" "}
-                  <span className="text-rose-500 font-bold font-sans">
-                    ← (!)
-                  </span>
-                </p>
-              </div>
-
-              <div className="space-y-2 text-xs font-mono leading-relaxed text-slate-600">
-                <p>⇔ 2x - 4 ≤ 1 · (x - 1)</p>
-                <p>⇔ 2x - 4 ≤ x - 1</p>
-                <p>
-                  ⇔ 2x + x ≤ 4 - 1{" "}
-                  <span className="text-rose-500 font-bold font-sans">
-                    ← (!)
-                  </span>
-                </p>
-                <p>⇔ 3x ≤ 3 ⇒ x ≤ 1</p>
-                <p className="text-slate-700 font-medium">
-                  Vậy tập nghiệm là S = (-∞; 1]
-                </p>
-              </div>
-            </div>
-
-            {/* Dynamic Absolute Mapping Layer via Bounding Boxes Coordinates */}
-            {evaluation.anomalies.map((box) => (
-              <div
-                key={box.id}
-                onMouseEnter={() => setHoveredAnomalyId(box.id)}
-                onMouseLeave={() => setHoveredAnomalyId(null)}
-                style={{
-                  left: `${box.x}%`,
-                  top: `${box.y}%`,
-                  width: `${box.width}%`,
-                  height: `${box.height}%`,
-                }}
-                className={`absolute rounded border-2 transition-all duration-200 cursor-crosshair ${
-                  hoveredAnomalyId === box.id
-                    ? "bg-rose-500/15 border-rose-500 shadow-lg shadow-rose-500/20 ring-1 ring-rose-400"
-                    : "bg-rose-500/5 border-rose-500/40"
-                }`}
-              >
-                {/* Visual Index Pin indicator badge */}
-                <span
-                  className={`absolute -top-4 -left-1 px-1 rounded font-sans text-[8px] font-black transition-colors ${
-                    hoveredAnomalyId === box.id
-                      ? "bg-rose-500 text-white"
-                      : "bg-rose-900/80 text-rose-200"
-                  }`}
+          <div className="relative w-full max-w-[420px] aspect-[3/4] bg-white rounded-lg shadow-2xl overflow-hidden border border-white/10 m-6 p-8 text-slate-700">
+            <div className="border-b-2 border-dashed border-indigo-100 pb-2">
+              <span className="font-bold text-xs text-slate-400 block mb-2">
+                BÀI LÀM TỰ LUẬN TOÁN
+              </span>
+              <p className="text-sm font-semibold text-indigo-950">
+                <ReactMarkdown
+                  remarkPlugins={[remarkMath]}
+                  rehypePlugins={[rehypeKatex]}
                 >
-                  {box.id.toUpperCase()}
-                </span>
-              </div>
-            ))}
-          </div>
-
-          {/* Floating Context Label Info Bar footer */}
-          <div className="absolute bottom-3 left-3 right-3 bg-slate-950/70 border border-slate-800/80 backdrop-blur rounded-xl p-2.5 text-center min-h-[40px] flex items-center justify-center">
-            {hoveredAnomalyId ? (
-              <p className="text-xs text-rose-300 font-medium flex items-center gap-1.5 animate-pulse">
-                <AlertTriangle className="size-3.5 text-rose-400 shrink-0" />
-                {
-                  evaluation.anomalies.find((a) => a.id === hoveredAnomalyId)
-                    ?.label
-                }
+                  {
+                    "Bài 1: Giải bất phương trình $\\frac{2x - 4}{x - 1} \\leq 1$"
+                  }
+                </ReactMarkdown>
               </p>
-            ) : (
-              <p className="text-[11px] text-slate-500 italic">
-                Rê chuột vào các vùng viền khung đỏ để xem nhanh ghi chú lỗi
-                toán học
-              </p>
-            )}
+            </div>
+            <p className="text-xs mt-4 font-mono">
+              Tính toán nháp giả lập hiển thị phía Canvas...
+            </p>
           </div>
         </div>
 
         {/* ==================== RIGHT HALF: EVALUATION CONTROL SHEET ==================== */}
-        <div className="bg-white rounded-2xl border border-slate-100 flex flex-col overflow-hidden shadow-sm">
-          {/* Metrics Telemetry HUD Block */}
-          <div className="bg-slate-50/70 border-b border-slate-100 p-4 grid grid-cols-3 gap-4 text-center">
-            <div className="space-y-0.5">
-              <span className="text-[10px] text-slate-400 font-bold uppercase tracking-wider block">
+        <div className="bg-white rounded-2xl border border-slate-200 flex flex-col overflow-hidden shadow-md">
+          {/* Metrics Telemetry HUD Block - Slightly larger for readability */}
+          <div className="bg-slate-50/80 border-b border-slate-200 p-6 flex items-center justify-evenly">
+            {/* Điểm Tổng Kết */}
+            <div className="flex flex-col items-center flex-1">
+              <span className="text-xs text-slate-500 font-bold uppercase tracking-wide block mb-1">
                 Điểm Tổng Kết
               </span>
-              <div className="text-xl font-black text-indigo-600 tracking-tight">
+              <div className="text-3xl font-black text-indigo-600">
                 {evaluation.totalScore}{" "}
-                <span className="text-xs text-slate-400 font-normal">/ 10</span>
+                <span className="text-sm text-slate-400 font-medium">/ 10</span>
               </div>
             </div>
-            <div className="space-y-0.5 border-x border-slate-200/60">
-              <span className="text-[10px] text-slate-400 font-bold uppercase tracking-wider block">
-                Độ Tin Cậy AI
-              </span>
-              <div className="text-xl font-black text-emerald-600 tracking-tight flex items-center justify-center gap-1">
-                <Cpu className="size-4 text-emerald-500" />{" "}
-                {evaluation.aiConfidence}
-              </div>
-            </div>
-            <div className="space-y-0.5">
-              <span className="text-[10px] text-slate-400 font-bold uppercase tracking-wider block">
+
+            {/* Divider Line (Optional, looks better with 2 items) */}
+            <div className="w-[1px] h-10 bg-slate-200" />
+
+            {/* Lỗi Phát Hiện */}
+            <div className="flex flex-col items-center flex-1">
+              <span className="text-xs text-slate-500 font-bold uppercase tracking-wide block mb-1">
                 Lỗi Phát Hiện
               </span>
-              <div className="text-xl font-black text-rose-600 tracking-tight">
-                {evaluation.anomalies.length} vùng
+              <div className="text-3xl font-black text-rose-600">
+                {evaluation.anomalies.length}{" "}
+                <span className="text-sm">Vùng</span>
               </div>
             </div>
           </div>
 
           {/* Scrollable Criteria Scoring Checklist Container */}
-          <div className="flex-1 overflow-y-auto p-5 space-y-5">
+          <div className="flex-1 overflow-y-auto p-6 space-y-8">
             {evaluation.criteria.map((item) => (
               <div
                 key={item.id}
-                className={`p-4 rounded-xl border transition-all duration-200 ${
+                className={`p-6 rounded-2xl border-2 transition-all duration-200 ${
                   item.isOverridden
-                    ? "bg-amber-50/30 border-amber-200/70 shadow-sm"
+                    ? "bg-amber-50/40 border-amber-200 shadow-sm"
                     : "bg-white border-slate-100 hover:border-slate-200"
                 }`}
               >
-                {/* Criteria Segment Header Block */}
-                <div className="flex items-start justify-between gap-4 mb-2">
-                  <h4 className="font-bold text-slate-800 text-xs tracking-tight pt-1">
+                {/* Criteria Segment Header - Made font larger (text-sm -> text-base) */}
+                <div className="flex items-center justify-between gap-4 mb-4">
+                  <h4 className="font-bold text-slate-800 text-base">
                     {item.name}
                   </h4>
 
-                  {/* Dynamic Override Numeric Input Node */}
-                  <div className="flex items-center gap-1.5 shrink-0 bg-slate-100 p-1 rounded-lg border border-slate-200/40">
+                  <div className="flex items-center gap-2 shrink-0 bg-slate-100 p-1.5 rounded-xl border border-slate-200">
                     <Input
                       type="number"
                       step="0.25"
-                      min="0"
-                      max={item.maxScore}
                       value={item.aiScore}
                       onChange={(e) =>
                         handleScoreChange(item.id, e.target.value)
                       }
-                      className="w-12 h-7 px-1 text-center text-xs font-black text-indigo-600 bg-white rounded shadow-sm border-0 focus-visible:ring-1 focus-visible:ring-indigo-500"
+                      className="w-16 h-9 px-2 text-center text-lg font-black text-indigo-600 bg-white rounded-lg border-0 shadow-inner"
                     />
-                    <span className="text-[10px] text-slate-400 font-bold pr-1">
+                    <span className="text-xs text-slate-500 font-bold pr-2">
                       / {item.maxScore}
                     </span>
                   </div>
                 </div>
 
-                {/* Feedback Input Node */}
+                {/* Feedback Input Node - ENLARGED FONT SIZE */}
                 <div className="relative mt-2">
-                  <Textarea
-                    value={item.aiFeedback}
-                    onChange={(e) =>
-                      handleFeedbackChange(item.id, e.target.value)
-                    }
-                    className="text-[11px] leading-relaxed text-slate-600 pr-7 py-2 min-h-[50px] rounded-lg border-slate-200/70 focus-visible:ring-indigo-500/50 bg-white"
-                  />
-                  <div className="absolute right-2 bottom-2 text-slate-300 pointer-events-none">
+                  {editingCriterionId === item.id ? (
+                    <Textarea
+                      autoFocus
+                      value={item.aiFeedback}
+                      onChange={(e) =>
+                        handleFeedbackChange(item.id, e.target.value)
+                      }
+                      onBlur={() => setEditingCriterionId(null)}
+                      className="text-base leading-relaxed text-slate-700 p-4 min-h-[120px] rounded-xl border-2 border-indigo-500 bg-white shadow-lg"
+                    />
+                  ) : (
+                    <div
+                      onClick={() => setEditingCriterionId(item.id)}
+                      className="text-base leading-relaxed text-slate-700 p-4 min-h-[100px] rounded-xl border-2 border-dashed border-slate-200 bg-slate-50/30 cursor-pointer hover:bg-slate-50 hover:border-indigo-200 transition-all prose prose-slate max-w-none"
+                    >
+                      {/* ReactMarkdown now renders with 'text-base' (16px) instead of 11px */}
+                      <ReactMarkdown
+                        remarkPlugins={[remarkMath]}
+                        rehypePlugins={[rehypeKatex]}
+                      >
+                        {item.aiFeedback || "*Nhấp để thêm nhận xét...*"}
+                      </ReactMarkdown>
+                    </div>
+                  )}
+
+                  <div className="absolute right-3 bottom-3 text-slate-300">
                     {item.isOverridden ? (
-                      <Edit3 className="size-3 text-amber-500" />
+                      <Edit3 className="size-4 text-amber-500" />
                     ) : (
-                      <Cpu className="size-3 text-slate-300" />
+                      <Cpu className="size-4" />
                     )}
                   </div>
                 </div>
 
-                {/* Status Notice Indicator */}
                 {item.isOverridden && (
-                  <div className="text-[9px] text-amber-600 font-bold mt-1 flex items-center gap-0.5">
-                    * Đã điều chỉnh thủ công bởi giáo viên
+                  <div className="text-xs text-amber-600 font-bold mt-2 flex items-center gap-1">
+                    <div className="size-1.5 bg-amber-500 rounded-full" /> Giáo
+                    viên đã chỉnh sửa
                   </div>
                 )}
               </div>
             ))}
 
-            {/* Global General Summary Evaluation Field */}
-            <div className="pt-2 border-t border-slate-100">
-              <label className="text-[10px] font-bold text-slate-400 uppercase tracking-wider mb-2 block flex items-center gap-1">
-                <MessageSquare className="size-3 text-indigo-500" /> Đánh giá
-                tổng quát toàn bài viết
+            {/* Global General Summary - LARGE View */}
+            <div className="pt-6 border-t-2 border-slate-100">
+              <label className="text-sm font-bold text-slate-500 uppercase tracking-wider mb-3 flex items-center gap-2">
+                <MessageSquare className="size-4 text-indigo-500" /> Nhận xét
+                tổng quát
               </label>
-              <Textarea
-                value={evaluation.generalComment}
-                onChange={(e) =>
-                  setEvaluation({
-                    ...evaluation,
-                    generalComment: e.target.value,
-                  })
-                }
-                className="text-xs leading-relaxed text-slate-600 p-3 min-h-[80px] rounded-xl border-slate-200"
-                placeholder="Nhập nhận xét chung..."
-              />
+
+              <div className="relative">
+                {editingGeneral ? (
+                  <Textarea
+                    autoFocus
+                    value={evaluation.generalComment}
+                    onChange={(e) =>
+                      setEvaluation({
+                        ...evaluation,
+                        generalComment: e.target.value,
+                      })
+                    }
+                    onBlur={() => setEditingGeneral(false)}
+                    className="text-base leading-relaxed text-slate-700 p-5 min-h-[150px] rounded-2xl border-2 border-indigo-500"
+                  />
+                ) : (
+                  <div
+                    onClick={() => setEditingGeneral(true)}
+                    className="text-base leading-relaxed text-slate-700 p-5 min-h-[120px] rounded-2xl border-2 border-dashed border-slate-200 bg-slate-50/30 cursor-pointer hover:bg-white transition-all prose prose-indigo max-w-none"
+                  >
+                    <ReactMarkdown
+                      remarkPlugins={[remarkMath]}
+                      rehypePlugins={[rehypeKatex]}
+                    >
+                      {evaluation.generalComment}
+                    </ReactMarkdown>
+                  </div>
+                )}
+              </div>
             </div>
           </div>
         </div>
