@@ -34,6 +34,7 @@ export function LoginPage() {
       setFieldErrors({ ...fieldErrors, global: undefined });
     }
   };
+  
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();

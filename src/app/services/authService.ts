@@ -17,24 +17,52 @@ export interface RegisterPayload {
 
 export const authService = {
   async login(payload: LoginPayload) {
+    console.log("Login attempt for:", payload.emailOrPhone);
+
     const { data, error } = await supabaseClient.functions.invoke("login", {
       body: payload,
     });
 
+    console.log("Edge Function Full Response:", { data, error });
+
     if (error) {
-      console.error("Edge login error object:", error);
+      console.error("Edge login error:", error);
       throw new Error(error.message || "Đăng nhập thất bại. Vui lòng thử lại.");
     }
 
-    if (data?.access_token) {
+    if (!data) {
+      throw new Error("No data returned from login function");
+    }
+
+    // Extract tokens — they are inside .session
+    const accessToken = data.session?.access_token;
+    const refreshToken = data.session?.refresh_token;
+    const userData = data.user || data.session?.user;
+
+    if (!accessToken || !refreshToken) {
+      console.error("Missing tokens in response:", data);
+      throw new Error("Invalid session data received from server");
+    }
+
+    try {
+      // Set Supabase session (critical for auth listeners)
       await supabaseClient.auth.setSession({
-        access_token: data.access_token,
-        refresh_token: data.refresh_token,
+        access_token: accessToken,
+        refresh_token: refreshToken,
       });
 
-      localStorage.setItem("scorify_access_token", data.access_token);
-      localStorage.setItem("scorify_refresh_token", data.refresh_token);
-      localStorage.setItem("scorify_user", JSON.stringify(data.user));
+      // Backup to localStorage (your fallback mechanism)
+      localStorage.setItem("scorify_access_token", accessToken);
+      localStorage.setItem("scorify_refresh_token", refreshToken);
+      localStorage.setItem("scorify_user", JSON.stringify(userData || data));
+
+      console.log("Login successful - Session & localStorage updated");
+    } catch (setSessionError) {
+      console.error("Failed to set Supabase session:", setSessionError);
+      // Still save to localStorage as fallback
+      localStorage.setItem("scorify_access_token", accessToken);
+      localStorage.setItem("scorify_refresh_token", refreshToken);
+      localStorage.setItem("scorify_user", JSON.stringify(userData || data));
     }
 
     return data;
