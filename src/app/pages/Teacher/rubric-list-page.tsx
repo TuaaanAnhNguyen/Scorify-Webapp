@@ -135,7 +135,8 @@ export function RubricListPage() {
         {filteredRubrics.map((rubric: any) => (
           <div 
             key={rubric.id}
-            className="bg-white border border-slate-100 rounded-xl p-5 shadow-sm hover:shadow-md hover:border-indigo-100 transition-all flex flex-col md:flex-row md:items-center md:justify-between gap-4 relative group"
+            onClick={() => navigate(`/rubrics/${rubric.id}`)}
+            className="bg-white border border-slate-100 rounded-xl p-5 shadow-sm hover:shadow-md hover:border-indigo-100 transition-all flex flex-col md:flex-row md:items-center md:justify-between gap-4 relative group cursor-pointer"
           >
             <div className="flex items-start gap-4 min-w-0">
               <div className="p-3 bg-indigo-50 border border-indigo-100 text-indigo-600 rounded-xl shrink-0">
@@ -150,24 +151,12 @@ export function RubricListPage() {
                   <Badge className="bg-slate-100 text-slate-600 hover:bg-slate-100 font-bold text-[10px] rounded px-2 py-0.5">
                     {rubric.grade}
                   </Badge>
-                  {rubric.tuLuanCount > 0 && (
-                    <Badge className="bg-amber-50 text-amber-700 border border-amber-100 hover:bg-amber-50 font-bold text-[10px] rounded px-2 py-0.5">
-                      Chấm Tự luận ({rubric.tuLuanCount} câu)
-                    </Badge>
-                  )}
                 </div>
 
                 <div className="flex flex-wrap items-center gap-y-1 gap-x-4 text-[11px] text-slate-400 font-medium">
                   <span className="flex items-center gap-1">
-                    <FileCheck className="size-3.5 text-slate-300" />
-                    Tổng số: <strong className="text-slate-600 font-semibold">{rubric.totalQuestions} câu</strong>
-                  </span>
-                  <span className="hidden sm:inline text-slate-200">•</span>
-                  <span>Định dạng: <strong className="text-slate-600 font-semibold">{rubric.type}</strong></span>
-                  <span className="hidden sm:inline text-slate-200">•</span>
-                  <span className="flex items-center gap-1">
                     <FolderOpen className="size-3.5 text-slate-300" />
-                    Gắn với {rubric.linkedFolders} thư mục bài tập
+                    Được giao cho {rubric.linkedFolders} lớp học
                   </span>
                 </div>
               </div>
@@ -179,11 +168,11 @@ export function RubricListPage() {
                 <p className="text-xs font-bold text-slate-600">{rubric.lastUsed}</p>
               </div>
 
-              <div className="flex items-center gap-1.5 pl-2 md:border-l border-slate-100">
+              <div className="flex items-center gap-1.5 pl-2 md:border-l border-slate-100" onClick={(e) => e.stopPropagation()}>
                 <Button 
                   variant="ghost" 
                   size="icon" 
-                  onClick={() => navigate(`/rubrics/${rubric.id}`)}
+                  onClick={() => navigate(`/rubrics/${rubric.id}/edit`)}
                   className="size-8 text-slate-400 hover:text-indigo-600 hover:bg-indigo-50 rounded-lg"
                 >
                   <Edit3 className="size-4" />

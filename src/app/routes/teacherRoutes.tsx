@@ -5,6 +5,7 @@ import { WorkspacePage } from "../pages/Teacher/teacher-workspace-page";
 import { PaymentPage } from "../pages/payment-page";
 import { RubricListPage } from "../pages/Teacher/rubric-list-page";
 import { CreateRubricPage } from "../pages/Teacher/create-rubric-page";
+import { RubricDetailPage } from "../pages/Teacher/rubric-detail-page";
 import { ClassroomListPage } from "../pages/Teacher/classroom-list-page";
 import { AssignmentDetailPage } from "../pages/Teacher/assignment-detail-page";
 import { CreateAssignmentPage } from "../pages/Teacher/create-assignment-page";
@@ -20,7 +21,8 @@ export function TeacherRoutes() {
 
         <Route path="rubrics" element={<RubricListPage />} />
         <Route path="rubrics/create" element={<CreateRubricPage />} />
-        <Route path="rubrics/:id" element={<CreateRubricPage />} />
+        <Route path="rubrics/:id" element={<RubricDetailPage />} />
+        <Route path="rubrics/:id/edit" element={<CreateRubricPage />} />
 
         <Route path="classrooms" element={<ClassroomListPage />} />
         <Route path="classrooms/:classId" element={<ClassroomDetailScreen />} />
