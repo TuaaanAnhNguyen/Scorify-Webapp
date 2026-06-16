@@ -1,25 +1,50 @@
 // src/app/layouts/teacherLayout.tsx
-import { Outlet, Link, useLocation } from "react-router-dom";
+
+import { Outlet, Link, useLocation, useNavigate } from "react-router-dom";
 import {
   LayoutDashboard,
-  FileSignature,
   Binary,
   Wallet,
   Settings,
   Bell,
   GraduationCap,
   School,
+  LogOut,
 } from "lucide-react";
+import { useAuth } from "../context/AuthContext";
 
 export function TeacherLayout() {
   const location = useLocation();
+  const navigate = useNavigate();
+
+  const authPayload = useAuth();
+
+  console.log("Live Dynamic Context Pipeline:", authPayload);
+  const { profile, subscription, loading, logout } = useAuth();
 
   const navItems = [
     { icon: LayoutDashboard, path: "/workspace", label: "Tổng quan" },
     { icon: Binary, path: "/rubrics", label: "Ma trận tiêu chí (Rubric)" },
     { icon: School, path: "/classrooms", label: "Lớp học & Bài tập" },
-    { icon: Wallet, path: "/payment", label: "Gói dịch vụ" },
+    { icon: Wallet, path: "/workspace/pricing", label: "Gói dịch vụ" },
   ];
+
+  const handleLogout = async () => {
+    try {
+      await logout();
+      navigate("/login");
+    } catch (err) {
+      console.error("Logout failed:", err);
+    }
+  };
+
+  if (loading) {
+    return (
+      <div className="h-screen w-screen bg-[#111A2E] flex items-center justify-center">
+        <div className="animate-spin rounded-full h-8 w-8 border-t-2 border-indigo-500"></div>
+      </div>
+    );
+  }
 
   return (
     <div className="flex h-screen w-screen bg-[#111A2E] overflow-hidden font-sans antialiased selection:bg-indigo-500/30">
@@ -39,7 +64,10 @@ export function TeacherLayout() {
           <nav className="flex flex-col items-end w-full pl-3 gap-1.5">
             {navItems.map((item, idx) => {
               const Icon = item.icon;
-              const isActive = location.pathname.startsWith(item.path);
+              const isActive =
+                item.path === "/workspace"
+                  ? location.pathname === "/workspace"
+                  : location.pathname.startsWith(item.path);
 
               return (
                 <Link
@@ -71,7 +99,7 @@ export function TeacherLayout() {
           </nav>
         </div>
 
-        <div className="flex flex-col items-end w-full pl-3">
+        <div className="flex flex-col items-center gap-4 w-full px-3">
           <Link
             to="/settings"
             className={`w-full h-14 relative flex items-center justify-center rounded-l-2xl transition-all duration-200 group ${
@@ -92,6 +120,15 @@ export function TeacherLayout() {
               <Settings className="size-5 group-hover:rotate-45 transition-transform duration-300" />
             </div>
           </Link>
+
+          {/* Explicit log-out utility trigger button */}
+          <button
+            onClick={handleLogout}
+            className="w-full h-12 flex items-center justify-center text-slate-500 hover:text-rose-400 transition-colors rounded-xl"
+            title="Đăng xuất"
+          >
+            <LogOut className="size-5" />
+          </button>
         </div>
       </aside>
 
@@ -100,7 +137,8 @@ export function TeacherLayout() {
           <div className="flex items-center gap-3">
             <span className="text-xs font-bold px-3 py-1 rounded-full bg-slate-100 text-slate-600 flex items-center gap-1.5">
               <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse"></span>
-              Hệ thống chấm điểm AI Scorify
+              {/* 🎯 Dynamic subscription tier fallback rendering naming */}
+              Scorify AI — Gói {subscription?.name || "Cơ Bản (Free)"}
             </span>
           </div>
 
@@ -115,16 +153,26 @@ export function TeacherLayout() {
               className="flex items-center gap-3 border-l border-slate-100 pl-4 group"
             >
               <div className="text-right hidden sm:block">
+                {/* 🎯 Pull profile name values from global data stream */}
                 <p className="text-sm font-bold text-slate-800 leading-tight group-hover:text-indigo-600 transition-colors">
-                  Cô Nguyễn Thu Hà
+                  {profile?.name || "Người dùng Scorify"}
                 </p>
                 <p className="text-[10px] font-medium text-slate-400 uppercase tracking-wider">
                   Hồ sơ của tôi
                 </p>
               </div>
-              <div className="w-9 h-9 rounded-lg bg-gradient-to-tr from-[#111A2E] to-[#22314E] text-white flex items-center justify-center font-bold text-sm shadow-inner group-hover:scale-105 transition-transform">
-                HA
-              </div>
+              
+              {profile?.profile_picture ? (
+                <img 
+                  src={profile.profile_picture} 
+                  alt="Avatar" 
+                  className="w-9 h-9 rounded-lg object-cover border border-slate-100 shadow-sm"
+                />
+              ) : (
+                <div className="w-9 h-9 rounded-lg bg-gradient-to-tr from-[#111A2E] to-[#22314E] text-white flex items-center justify-center font-bold text-sm shadow-inner group-hover:scale-105 transition-transform">
+                  {profile?.name ? profile.name.substring(0, 2).toUpperCase() : "SC"}
+                </div>
+              )}
             </Link>
           </div>
         </header>

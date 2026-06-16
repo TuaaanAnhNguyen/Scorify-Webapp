@@ -7,11 +7,18 @@ import { LoginPage } from "../pages/login-page";
 
 import { TeacherRoutes } from "./teacherRoutes";
 import { AdminRoutes } from "./adminRoutes";
+import { SubscriptionPage } from "../pages/subscription-page";
 
-function ProtectedRoute({ children, allowedRole }: { children: React.ReactNode; allowedRole: "teacher" | "admin" }) {
+function ProtectedRoute({
+  children,
+  allowedRole,
+}: {
+  children: React.ReactNode;
+  allowedRole: "teacher" | "admin";
+}) {
   const auth = {
-    isAuthenticated: true, 
-    role: "teacher" as "teacher" | "admin"
+    isAuthenticated: true,
+    role: "teacher" as "teacher" | "admin",
   };
 
   if (!auth.isAuthenticated) {
@@ -19,7 +26,9 @@ function ProtectedRoute({ children, allowedRole }: { children: React.ReactNode; 
   }
 
   if (auth.role !== allowedRole) {
-    return <Navigate to={auth.role === "admin" ? "/admin" : "/dashboard"} replace />;
+    return (
+      <Navigate to={auth.role === "admin" ? "/admin" : "/dashboard"} replace />
+    );
   }
 
   return <>{children}</>;
@@ -32,24 +41,25 @@ export function RouteCentral() {
         <Route index element={<LandingPage />} />
         <Route path="signup" element={<SignUpPage />} />
         <Route path="login" element={<LoginPage />} />
+        <Route path="pricing" element={<SubscriptionPage />} />
       </Route>
 
-      <Route 
-        path="/*" 
+      <Route
+        path="/*"
         element={
           <ProtectedRoute allowedRole="teacher">
             <TeacherRoutes />
           </ProtectedRoute>
-        } 
+        }
       />
 
-      <Route 
-        path="/admin/*" 
+      <Route
+        path="/admin/*"
         element={
           <ProtectedRoute allowedRole="admin">
             <AdminRoutes />
           </ProtectedRoute>
-        } 
+        }
       />
 
       <Route path="*" element={<Navigate to="/" replace />} />
