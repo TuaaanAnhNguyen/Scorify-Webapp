@@ -40,19 +40,37 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   );
   const [loading, setLoading] = useState(true);
 
-  // Modular engine to synchronize context state with live Supabase storage data
   async function fetchSessionData() {
     try {
       setLoading(true);
 
-      // 1. Get current authenticated core user credentials
-      const {
+      let {
         data: { session },
         error: sessionError,
       } = await supabaseClient.auth.getSession();
 
+      if (!session?.user) {
+        const backupAccess = localStorage.getItem("scorify_access_token");
+        const backupRefresh = localStorage.getItem("scorify_refresh_token");
+
+        if (backupAccess && backupRefresh) {
+          console.log(
+            "Re-hydrating Supabase client instance from token fallbacks...",
+          );
+          const { data: hydratedData, error: hydrateError } =
+            await supabaseClient.auth.setSession({
+              access_token: backupAccess,
+              refresh_token: backupRefresh,
+            });
+
+          if (!hydrateError && hydratedData.session) {
+            session = hydratedData.session;
+          }
+        }
+      }
+
       if (sessionError || !session?.user) {
-        console.warn("No active session found");
+        console.warn("No active session could be resolved.");
         setUser(null);
         setProfile(null);
         setSubscription(null);
@@ -62,7 +80,6 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       const authUser = session.user;
       setUser(authUser);
 
-      // 2. Load custom user profile metadata row
       const { data: profileData, error: profileError } = await supabaseClient
         .from("profiles")
         .select("*")
@@ -72,7 +89,6 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       if (!profileError && profileData) {
         setProfile(profileData as UserProfile);
       } else {
-        // Parse the local storage backup saved in authService if user_metadata isn't hydrated yet
         const localUserStr = localStorage.getItem("scorify_user");
         let cachedMetadata = null;
         try {
@@ -100,17 +116,24 @@ export function AuthProvider({ children }: { children: ReactNode }) {
           role:
             cachedMetadata?.role || authUser.user_metadata?.role || "teacher",
         });
-      } // 🎯 FIXED: This closing bracket was missing, which broke the try-catch alignment below!
+      }
 
-      // 3. Fetch active user subscription plan via your existing service RPC method
-      const subDataArray = await subscriptionService.getUserSubscription(
-        authUser.id,
-      );
-      setSubscription(
-        subDataArray && subDataArray.length > 0
-          ? (subDataArray[0] as SubscriptionPlan)
-          : null,
-      );
+      try {
+        const subDataArray = await subscriptionService.getUserSubscription(
+          authUser.id,
+        );
+
+        console.log("RAW SUBSCRIPTION DATA FROM RPC:", subDataArray);
+
+        setSubscription(
+          subDataArray && subDataArray.length > 0
+            ? (subDataArray[0] as SubscriptionPlan)
+            : null,
+        );
+      } catch (subErr) {
+        console.error("Error fetching subscription data details:", subErr);
+        setSubscription(null);
+      }
     } catch (err) {
       console.error("Error aggregating AuthContext:", err);
     } finally {

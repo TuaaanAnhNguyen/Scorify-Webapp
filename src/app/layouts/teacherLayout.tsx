@@ -138,7 +138,7 @@ export function TeacherLayout() {
             <span className="text-xs font-bold px-3 py-1 rounded-full bg-slate-100 text-slate-600 flex items-center gap-1.5">
               <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse"></span>
               {/* 🎯 Dynamic subscription tier fallback rendering naming */}
-              Scorify AI — Gói {subscription?.name || "Cơ Bản (Free)"}
+              Scorify AI — Gói {subscription?.plan_name || "Cơ Bản (Free)"}
             </span>
           </div>
 

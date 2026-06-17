@@ -1,24 +1,42 @@
 // src/app/pages/subscription-page.tsx
-
 import { useEffect, useState } from "react";
-import { Check, ShieldCheck, Zap, Award, Sparkles } from "lucide-react";
+import { useLocation, useSearchParams } from "react-router-dom";
+import {
+  Check,
+  ShieldCheck,
+  Zap,
+  Award,
+  Sparkles,
+  Loader2,
+} from "lucide-react";
 import {
   subscriptionService,
   SubscriptionPlan,
 } from "../services/subscriptionService";
+import { momoService } from "../services/momoService";
+import { toast } from "sonner";
+import { useAuth } from "../context/AuthContext"; // 🎯 BỔ SUNG: Import hook Auth
 
 export function SubscriptionPage() {
   const [plans, setPlans] = useState<SubscriptionPlan[]>([]);
   const [loading, setLoading] = useState(true);
+  const [processingPlanId, setProcessingPlanId] = useState<string | null>(null);
 
-  const [currentSubPlanId, setCurrentSubPlanId] = useState<string | null>(null);
+  // 🎯 BỔ SUNG: Lấy dữ liệu live user và hàm làm mới session từ Global Context
+  const { user, subscription, refreshSession } = useAuth();
+  const currentSubPlanId = subscription?.plan_id || null;
 
+  const location = useLocation();
+  const [searchParams, setSearchParams] = useSearchParams(); // Thêm setSearchParams để dọn URL sau khi xử lý
+
+  const isTeacherWorkspace = location.pathname.includes("/workspace");
+
+  // 1. Tải danh sách gói từ Database
   useEffect(() => {
     async function loadData() {
       try {
         setLoading(true);
         const data = await subscriptionService.getSubscriptionPlans();
-
         if (data && data.length > 0) {
           const sortedPlans = [...data].sort((a, b) => a.price - b.price);
           setPlans(sortedPlans);
@@ -35,160 +53,257 @@ export function SubscriptionPage() {
     loadData();
   }, []);
 
+  // 2. 🎯 TỐI ƯU: Hứng callback thành công, hiển thị thông báo và ép Context tải lại dữ liệu mới nhất
+  useEffect(() => {
+    const status = searchParams.get("status");
+    const resultCode = searchParams.get("resultCode");
+
+    // Lấy thêm các tham số đi kèm mà MoMo đính vào URL khi redirect về
+    const amount = searchParams.get("amount");
+    const orderId = searchParams.get("orderId");
+    const transId =
+      searchParams.get("transId") || "MOCK_TRANS_ID_" + Date.now();
+    const extraData = searchParams.get("extraData");
+
+    async function handleSuccessPayment() {
+      if (!user?.id) return;
+
+      try {
+        const loadingToast = toast.loading(
+          "MoMo xác nhận thành công. Đang cập nhật quyền truy cập tài khoản...",
+        );
+
+        // 🎯 Khởi tạo một đối tượng Client Supabase thông thường (hoặc gọi qua Service)
+        // Giải mã extraData để lấy Plan ID nếu cần, hoặc lấy luôn gói hiện tại bạn lưu local
+        let planId = "864a1a95-1945-4533-bf10-47b9ae67abe0"; // Mặc định gói 1 tháng nếu lỗi giải mã
+        if (extraData) {
+          try {
+            const decoded = JSON.parse(atob(extraData));
+            if (decoded.subscriptionType) planId = decoded.subscriptionType;
+          } catch (e) {
+            console.error("Lỗi parse extraData:", e);
+          }
+        }
+
+        const startDate = new Date();
+        const endDate = new Date();
+
+        // Tính toán hạn dùng giống Backend
+        if (planId === "864a1a95-1945-4533-bf10-47b9ae67abe0")
+          endDate.setMonth(startDate.getMonth() + 1);
+        else if (planId === "b2ad771c-bd2a-465a-9ebc-af8040958e8d")
+          endDate.setMonth(startDate.getMonth() + 3);
+        else endDate.setMonth(startDate.getMonth() + 12);
+
+        // 🎯 ÉP CẬP NHẬT DIRECT VÀO DATABASE TỪ CLIENT LUÔN!
+        await subscriptionService.upsertUserSubscription({
+          p_profile_id: user.id,
+          p_plan_id: planId,
+          p_start_date: startDate.toISOString(),
+          p_end_date: endDate.toISOString(),
+        });
+
+        toast.dismiss(loadingToast);
+        toast.success(
+          "🎉 Tài khoản của bạn đã được nâng cấp lên Premium thành công!",
+        );
+
+        // Làm sạch URL thanh toán
+        const newParams = new URLSearchParams(searchParams);
+        [
+          "status",
+          "resultCode",
+          "amount",
+          "orderId",
+          "transId",
+          "extraData",
+          "signature",
+        ].forEach((p) => newParams.delete(p));
+        setSearchParams(newParams);
+
+        refreshSession(); // Cập nhật lại Context trạng thái User
+      } catch (err: any) {
+        toast.error(`Không thể kích hoạt gói tự động: ${err.message}`);
+      }
+    }
+
+    // 🎯 Nếu MoMo báo thành công (status=success hoặc resultCode=0)
+    if (status === "success" || resultCode === "0") {
+      handleSuccessPayment();
+    } else if (status === "error" || resultCode === "9000") {
+      toast.error("❌ Giao dịch đã bị hủy bỏ hoặc thất bại từ cổng MoMo.");
+    }
+  }, [searchParams, user, refreshSession, setSearchParams]);
+
   const handleSubscribe = async (plan: SubscriptionPlan) => {
-    alert(
-      `Bắt đầu xử lý thanh toán cho ${plan.name} với giá ${plan.price.toLocaleString("vi-VN")} VND / ${plan.billing_period}`,
-    );
-  };
-
-  const formatMB = (bytes: number) => {
-    if (!bytes) return "Không giới hạn";
-    return `${Math.floor(bytes / (1024 * 1024))} MB`;
-  };
-
-  const getPlanPresentation = (plan: SubscriptionPlan) => {
-    const period = plan.billing_period?.toLowerCase() || "";
-    const baseMonthlyPrice = 149000;
-
-    if (period.includes("12") || period.includes("năm")) {
-      const originalPrice = baseMonthlyPrice * 12;
-      const savingsPercent = Math.round(
-        ((originalPrice - plan.price) / originalPrice) * 100,
-      );
-
-      return {
-        icon: <Award className="size-6 text-purple-500" />,
-        badge: "Tiết kiệm lớn nhất",
-        badgeStyle: "bg-purple-100 text-purple-700",
-        buttonStyle:
-          "bg-purple-600 hover:bg-purple-700 text-white shadow-purple-200",
-        cardBorder: "border-2 border-purple-500 transform lg:scale-105 z-10",
-        originalPrice,
-        savingsText: `Tiết kiệm ${savingsPercent}%`,
-      };
+    if (!user?.id) {
+      toast.error("Vui lòng đăng nhập hệ thống để thực hiện mua gói dịch vụ!");
+      return;
     }
 
-    if (period.includes("3") || period.includes("quý")) {
-      const originalPrice = baseMonthlyPrice * 3;
-      const savingsPercent = Math.round(
-        ((originalPrice - plan.price) / originalPrice) * 100,
+    // Nếu bấm vào gói hiện tại đang dùng thì chặn không xử lý gửi đi
+    if (currentSubPlanId === plan.plan_id) return;
+
+    try {
+      setProcessingPlanId(plan.plan_id);
+
+      const res = await momoService.requestPaymentLink(
+        user.id,
+        plan.price,
+        plan.plan_id,
+        isTeacherWorkspace,
       );
 
-      return {
-        icon: <Zap className="size-6 text-blue-500" />,
-        badge: "Khuyên dùng",
-        badgeStyle: "bg-blue-100 text-blue-700",
-        buttonStyle: "bg-blue-600 hover:bg-blue-700 text-white shadow-blue-200",
-        cardBorder: "border border-blue-200",
-        originalPrice,
-        savingsText: `Tiết kiệm ${savingsPercent}%`,
-      };
+      if (res && res.resultCode === 0 && res.payUrl) {
+        window.location.href = res.payUrl;
+      } else {
+        throw new Error(
+          res.message || "Không thể khởi tạo link thanh toán từ cổng MoMo.",
+        );
+      }
+    } catch (error: any) {
+      toast.error(
+        `Lỗi xử lý giao dịch: ${error.message || "Vui lòng kiểm tra lại kết nối Edge Function."}`,
+      );
+    } finally {
+      setProcessingPlanId(null);
     }
-
-    return {
-      icon: <ShieldCheck className="size-6 text-gray-500" />,
-      badge: "Cơ bản",
-      badgeStyle: "bg-gray-100 text-gray-600",
-      buttonStyle: "bg-[#344464] hover:bg-[#28354f] text-white shadow-gray-100",
-      cardBorder: "border border-gray-200",
-      originalPrice: plan.price,
-      savingsText: "",
-    };
   };
 
   if (loading) {
     return (
-      <div className="min-h-screen bg-gray-50 flex flex-col items-center justify-center font-sans">
-        <div className="animate-spin rounded-full h-10 w-10 border-b-2 border-blue-600"></div>
-        <p className="mt-4 text-sm font-medium text-gray-500">
-          Đang tải cấu hình gói dịch vụ Scorify...
-        </p>
+      <div className="w-full min-h-[400px] flex items-center justify-center">
+        <Loader2 className="size-8 animate-spin text-indigo-600" />
       </div>
     );
   }
 
-  return (
-    <div className="min-h-screen bg-gray-50 py-16 px-4 font-sans selection:bg-blue-500 selection:text-white">
-      <div className="max-w-6xl mx-auto">
-        <div className="text-center mb-16">
-          <div className="inline-flex items-center gap-1.5 px-3 py-1 bg-blue-50 border border-blue-100 text-blue-600 rounded-full text-xs font-semibold mb-3 tracking-wide uppercase">
-            <Sparkles className="size-3.5 fill-blue-100" /> Nâng cấp hội viên
-          </div>
-          <h1 className="text-3xl md:text-4xl font-extrabold text-gray-900 tracking-tight mb-4">
-            Bảng giá gia hạn tài khoản Scorify
-          </h1>
-          <p className="text-gray-500 max-w-xl mx-auto text-sm md:text-base leading-relaxed">
-            Chọn khoảng thời gian cam kết phù hợp để mở khóa toàn bộ tính năng
-            và gia tăng hiệu suất chấm điểm bài thi tự động bằng công nghệ AI.
-          </p>
-        </div>
+  const planMetaMap: Record<
+    string,
+    { badge?: string; icon: any; buttonStyle: string; cardStyle: string }
+  > = {
+    "864a1a95-1945-4533-bf10-47b9ae67abe0": {
+      icon: Zap,
+      buttonStyle: "bg-gray-900 hover:bg-gray-800 text-white",
+      cardStyle: "border-gray-200 shadow-sm",
+    },
+    "b2ad771c-bd2a-465a-9ebc-af8040958e8d": {
+      badge: "Phổ biến",
+      icon: Award,
+      buttonStyle: "bg-indigo-600 hover:bg-indigo-700 text-white",
+      cardStyle: "border-indigo-200 shadow-md ring-1 ring-indigo-500/10",
+    },
+    "1facbe75-4a9a-457d-9675-0b2695c220b0": {
+      badge: "Tiết kiệm nhất",
+      icon: Sparkles,
+      buttonStyle:
+        "bg-gradient-to-r from-amber-500 to-orange-500 hover:from-amber-600 hover:to-orange-600 text-white shadow-md shadow-orange-500/10",
+      cardStyle:
+        "border-amber-200 shadow-md ring-1 ring-amber-500/20 bg-amber-50/10",
+    },
+  };
 
-        <div className="grid md:grid-cols-3 gap-8 items-stretch max-w-5xl mx-auto pt-4">
+  return (
+    <div
+      className={`w-full font-sans mx-auto ${
+        isTeacherWorkspace
+          ? "max-w-5xl px-2 py-6"
+          : "max-w-7xl px-6 py-16 sm:py-24 lg:px-8 bg-white"
+      }`}
+    >
+      <div className="flex flex-col items-center text-center mb-12">
+        <div className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-indigo-50 text-indigo-700 text-xs font-semibold mb-4 border border-indigo-100">
+          <ShieldCheck className="size-3.5" /> An toàn & Bảo mật qua MoMo
+        </div>
+        <h2 className="text-3xl sm:text-4xl font-black text-gray-900 tracking-tight">
+          Nâng cấp tài khoản Scorify Premium
+        </h2>
+        <p className="mt-4 text-base text-gray-600 max-w-2xl">
+          Tăng tốc quy trình chấm điểm, không giới hạn tiêu chí và mở khóa toàn
+          bộ sức mạnh AI để quản lý lớp học toàn diện hơn.
+        </p>
+      </div>
+
+      <div className="flex justify-center">
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-8 w-full max-w-6xl">
           {plans.map((plan) => {
-            const meta = getPlanPresentation(plan);
+            const meta = planMetaMap[plan.plan_id] || {
+              icon: Zap,
+              buttonStyle: "bg-indigo-600 hover:bg-indigo-700 text-white",
+              cardStyle: "border-gray-200 shadow-sm",
+            };
+            const IconComponent = meta.icon;
             const isCurrent = currentSubPlanId === plan.plan_id;
+            const isProcessing = processingPlanId === plan.plan_id;
 
             return (
               <div
                 key={plan.plan_id}
-                className={`bg-white rounded-2xl p-8 relative flex flex-col justify-between shadow-sm hover:shadow-md transition-all duration-300 ${meta.cardBorder}`}
+                className={`relative flex flex-col justify-between p-8 rounded-2xl border transition-all duration-300 hover:translate-y-[-4px] hover:shadow-lg ${
+                  isCurrent
+                    ? "border-emerald-500 shadow-md ring-2 ring-emerald-500/10 bg-emerald-50/5"
+                    : meta.cardStyle
+                }`}
               >
-                <div className="absolute top-4 right-4">
-                  <span
-                    className={`text-[10px] uppercase tracking-wider font-bold px-2.5 py-1 rounded-full ${meta.badgeStyle}`}
-                  >
+                {meta.badge && !isCurrent && (
+                  <span className="absolute top-0 right-6 translate-y-[-50%] px-3 py-1 rounded-full text-[10px] font-bold uppercase tracking-wider bg-indigo-100 text-indigo-700 border border-indigo-200">
                     {meta.badge}
                   </span>
-                </div>
+                )}
+                {isCurrent && (
+                  <span className="absolute top-0 right-6 translate-y-[-50%] px-3 py-1 rounded-full text-[10px] font-bold uppercase tracking-wider bg-emerald-100 text-emerald-700 border border-emerald-200 flex items-center gap-1">
+                    ✓ Đang kích hoạt
+                  </span>
+                )}
 
                 <div>
-                  <div className="mb-4 p-2 bg-gray-50 rounded-xl inline-block">
-                    {meta.icon}
-                  </div>
-
-                  <h3 className="text-lg font-bold text-gray-900 mb-1">
-                    {plan.name}
-                  </h3>
-
-                  <p className="text-xs font-medium text-gray-400 capitalize mb-4">
-                    Thời hạn: {plan.billing_period}
-                  </p>
-
-                  <div className="my-4">
-                    <div className="flex items-baseline gap-1.5">
-                      <span className="text-3xl font-extrabold text-gray-900 tracking-tight">
-                        {plan.price.toLocaleString("vi-VN")}
-                      </span>
-                      <span className="text-xs font-semibold text-gray-400">
-                        VND
-                      </span>
+                  <div className="flex items-center gap-3 mb-4">
+                    <div
+                      className={`p-2.5 rounded-xl border shrink-0 ${isCurrent ? "bg-emerald-50 border-emerald-100 text-emerald-600" : "bg-gray-50 border-gray-100 text-indigo-600"}`}
+                    >
+                      <IconComponent className="size-5" />
                     </div>
-
-                    {meta.savingsText && (
-                      <div className="flex items-center gap-2 mt-1">
-                        <span className="text-xs text-gray-400 line-through">
-                          {meta.originalPrice.toLocaleString("vi-VN")} VND
-                        </span>
-                        <span className="text-[11px] font-bold text-green-600 bg-green-50 px-1.5 py-0.5 rounded">
-                          {meta.savingsText}
-                        </span>
-                      </div>
-                    )}
+                    <div>
+                      <h3 className="font-bold text-gray-900 text-lg">
+                        {plan.plan_name}
+                      </h3>
+                      <p className="text-xs text-gray-500 font-medium">
+                        Kỳ hạn {plan.billing_period}
+                      </p>
+                    </div>
                   </div>
 
-                  <hr className="my-6 border-gray-100" />
+                  <div className="flex items-baseline text-gray-950 mb-6">
+                    <span className="text-3xl font-extrabold tracking-tight">
+                      {plan.price.toLocaleString("vi-VN")}
+                    </span>
+                    <span className="text-sm font-semibold text-gray-500 ml-1">
+                      VND
+                    </span>
+                  </div>
 
-                  <ul className="space-y-4 mb-8">
+                  <div className="w-full border-t border-gray-100 my-4" />
+
+                  <ul className="space-y-3.5 mb-8">
                     <li className="flex items-start gap-3 text-sm text-gray-600">
-                      <Check className="size-4.5 text-green-500 shrink-0 mt-0.5" />
+                      <Check
+                        className={`size-4.5 shrink-0 mt-0.5 ${isCurrent ? "text-emerald-500" : "text-green-500"}`}
+                      />
                       <span>
-                        Dung lượng tải lên:{" "}
-                        <strong>{formatMB(plan.file_size_limit)}</strong> mỗi
-                        file bài viết
+                        Dung lượng file tối đa:{" "}
+                        <strong>
+                          {(
+                            Number(plan.file_size_limit) /
+                            (1024 * 1024)
+                          ).toFixed(0)}{" "}
+                          MB
+                        </strong>
                       </span>
                     </li>
                     <li className="flex items-start gap-3 text-sm text-gray-600">
-                      <Check className="size-4.5 text-green-500 shrink-0 mt-0.5" />
+                      <Check
+                        className={`size-4.5 shrink-0 mt-0.5 ${isCurrent ? "text-emerald-500" : "text-green-500"}`}
+                      />
                       <span>
                         Lượt chấm thi AI:{" "}
                         <strong>
@@ -198,7 +313,9 @@ export function SubscriptionPage() {
                       </span>
                     </li>
                     <li className="flex items-start gap-3 text-sm text-gray-600">
-                      <Check className="size-4.5 text-green-500 shrink-0 mt-0.5" />
+                      <Check
+                        className={`size-4.5 shrink-0 mt-0.5 ${isCurrent ? "text-emerald-500" : "text-green-500"}`}
+                      />
                       <span>
                         Truy xuất dữ liệu, chấm nhận diện chữ viết tay bằng OCR
                       </span>
@@ -208,13 +325,16 @@ export function SubscriptionPage() {
 
                 <button
                   onClick={() => handleSubscribe(plan)}
-                  disabled={isCurrent}
-                  className={`w-full py-3 rounded-xl text-xs font-bold transition-all duration-200 shadow-sm ${
+                  disabled={isCurrent || processingPlanId !== null}
+                  className={`w-full py-3 rounded-xl text-xs font-bold transition-all duration-200 shadow-sm flex items-center justify-center gap-2 ${
                     isCurrent
-                      ? "bg-gray-100 text-gray-400 cursor-not-allowed border border-gray-200 shadow-none"
+                      ? "bg-emerald-500 text-white cursor-not-allowed border border-emerald-600 shadow-none opacity-80"
                       : meta.buttonStyle
                   }`}
                 >
+                  {isProcessing && (
+                    <Loader2 className="size-3.5 animate-spin mr-1" />
+                  )}
                   {isCurrent ? "Gói hiện tại của bạn" : "Đăng ký mua ngay"}
                 </button>
               </div>

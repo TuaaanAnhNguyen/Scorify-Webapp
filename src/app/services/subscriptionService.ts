@@ -4,11 +4,12 @@ import { supabaseClient } from "./supabaseClient.ts";
 
 export interface SubscriptionPlan {
   plan_id: string;
-  name: string;
+  plan_name: string;
   price: number;
   file_size_limit: number;
   submission_limit: number;
   billing_period: string;
+  status?: string;
 }
 
 export interface UserSubscription {
