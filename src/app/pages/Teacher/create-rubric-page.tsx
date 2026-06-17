@@ -8,11 +8,20 @@ import {
   UploadCloud,
   FileCheck,
   Sparkles,
-  Loader2
+  Loader2,
+  Check,
+  ChevronsUpDown,
+  Search
 } from "lucide-react";
 import { Button } from "@/app/components/ui/button";
 import { Input } from "@/app/components/ui/input";
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/app/components/ui/select";
+import { Badge } from "@/app/components/ui/badge";
+import {
+  Popover,
+  PopoverContent,
+  PopoverTrigger,
+} from "@/app/components/ui/popover";
+import { cn } from "@/app/components/ui/utils";
 import { toast } from "sonner";
 import { supabaseClient } from "@/app/services/supabaseClient";
 import { useAuth } from "@/app/context/AuthContext";
@@ -20,51 +29,71 @@ import { useAuth } from "@/app/context/AuthContext";
 export function CreateRubricPage() {
   const { id } = useParams();
   const navigate = useNavigate();
-  const { user } = useAuth();
+  const { user, profile, loading: authLoading } = useAuth();
   const isEditMode = !!id;
 
   const [title, setTitle] = React.useState("");
-  const [grade, setGrade] = React.useState("Lớp 12");
+  const [selectedClasses, setSelectedClasses] = React.useState<string[]>([]);
+  const [classes, setClasses] = React.useState<any[]>([]);
   const [isUploading, setIsUploading] = React.useState(false);
-  const [loading, setLoading] = React.useState(isEditMode);
-  
+  const [loading, setLoading] = React.useState(true);
+  const [openClassPopover, setOpenClassPopover] = React.useState(false);
+  const [classSearchTerm, setClassSearchTerm] = React.useState("");
+
   const [examFile, setExamFile] = React.useState<File | null>(null);
   const [rubricFile, setRubricFile] = React.useState<File | null>(null);
-  const [existingFileUrl, setExistingFileUrl] = React.useState<string | null>(null);
   
   const examInputRef = React.useRef<HTMLInputElement>(null);
   const rubricInputRef = React.useRef<HTMLInputElement>(null);
 
+  // Fetch available classes for the teacher
   React.useEffect(() => {
-    const fetchRubric = async () => {
-      if (isEditMode && id) {
-        try {
-          setLoading(true);
-          const { data, error } = await supabaseClient
-            .from('rubric')
+    const fetchData = async () => {
+      const targetUserId = user?.id || profile?.id;
+      
+      if (authLoading) return;
+      if (!targetUserId) {
+        setLoading(false);
+        return;
+      }
+      
+      try {
+        setLoading(true);
+        console.log("FETCH START for teacher:", targetUserId);
+        
+        const { data, error: classError } = await supabaseClient
+          .from('class')
+          .select('*')
+          .eq('teacher_profile_id', targetUserId);
+
+        if (classError) throw classError;
+        
+        console.log("FETCH SUCCESS. Found:", data?.length, "classes");
+        setClasses(data || []);
+
+        if (isEditMode && id) {
+          const { data: examData, error: examError } = await supabaseClient
+            .from('exam')
             .select('*')
-            .eq('rubric_id', id)
-            .single();
+            .eq('exam_id', id)
+            .maybeSingle();
 
-          if (error) throw error;
-
-          if (data) {
-            // Clean title by removing prefix tags if they exist
-            const cleanTitle = data.rubric_name.replace(/^\[(Đề thi|Đáp án)\] /, "");
-            setTitle(cleanTitle);
-            setExistingFileUrl(data.rubric_description);
+          if (examError) throw examError;
+          if (examData) {
+            setTitle(examData.exam_name);
+            setSelectedClasses([examData.class_id]);
           }
-        } catch (error) {
-          console.error("Error fetching rubric:", error);
-          toast.error("Không thể tải thông tin bài tập.");
-        } finally {
-          setLoading(false);
         }
+      } catch (error: any) {
+        console.error("Fetch operation failed:", error);
+        toast.error(`Lỗi: ${error.message || "Không thể tải dữ liệu"}`);
+      } finally {
+        setLoading(false);
       }
     };
 
-    fetchRubric();
-  }, [id, isEditMode]);
+    fetchData();
+  }, [user?.id, profile?.id, authLoading, id, isEditMode]);
 
   const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>, type: "exam" | "rubric") => {
     const file = e.target.files?.[0];
@@ -85,22 +114,17 @@ export function CreateRubricPage() {
   };
 
   const uploadFileToSupabase = async (file: File, folder: string) => {
-    if (!user) {
-      throw new Error("Người dùng chưa đăng nhập!");
-    }
+    if (!user) throw new Error("Người dùng chưa đăng nhập!");
 
     const fileExt = file.name.split('.').pop();
     const fileName = `${Math.random().toString(36).substring(2)}_${Date.now()}.${fileExt}`;
     const filePath = `${user.id}/${folder}/${fileName}`;
 
-    const { data, error } = await supabaseClient.storage
+    const { error } = await supabaseClient.storage
       .from('Scorify_rubrics')
       .upload(filePath, file);
 
-    if (error) {
-      console.error("Storage upload error:", error);
-      throw error;
-    }
+    if (error) throw error;
 
     const { data: { publicUrl } } = supabaseClient.storage
       .from('Scorify_rubrics')
@@ -109,10 +133,22 @@ export function CreateRubricPage() {
     return publicUrl;
   };
 
-  // Mock Save Flow updating local storage
+  const toggleClass = (classId: string) => {
+    setSelectedClasses(prev => 
+      prev.includes(classId) 
+        ? prev.filter(id => id !== classId) 
+        : [...prev, classId]
+    );
+  };
+
   const handleSaveRubric = async () => {
     if (!title.trim()) {
       toast.error("Vui lòng điền tên bài tập / đề thi!");
+      return;
+    }
+
+    if (selectedClasses.length === 0) {
+      toast.error("Vui lòng chọn ít nhất một lớp học!");
       return;
     }
 
@@ -121,80 +157,71 @@ export function CreateRubricPage() {
       return;
     }
 
-    const confirmSave = window.confirm("Bạn có chắc chắn muốn lưu bài tập này và tải các tệp lên hệ thống?");
+    const confirmSave = window.confirm(`Bạn có chắc chắn muốn giao bài tập này cho ${selectedClasses.length} lớp học đã chọn?`);
     if (!confirmSave) return;
 
     setIsUploading(true);
 
     try {
-      if (isEditMode) {
-        // Handle Update logic
-        let newUrl = existingFileUrl;
-        
-        // If user uploaded a new file in edit mode, upload it first
-        // In edit mode, we only handle one file (the one that matches the row)
-        // For simplicity, we'll check both but typically only one row is edited at a time
-        const fileToUpload = examFile || rubricFile;
-        if (fileToUpload) {
-          newUrl = await uploadFileToSupabase(fileToUpload, "updates");
-        }
+      let examUrl = "";
+      let rubricUrl = "";
 
+      if (examFile) examUrl = await uploadFileToSupabase(examFile, "exams");
+      if (rubricFile) rubricUrl = await uploadFileToSupabase(rubricFile, "rubrics");
+
+      const description = JSON.stringify({
+        examUrl: examUrl || null,
+        rubricUrl: rubricUrl || null,
+        createdAt: new Date().toISOString()
+      });
+
+      if (isEditMode) {
         const { error: updateError } = await supabaseClient
-          .from('rubric')
+          .from('exam')
           .update({
-            rubric_name: title, // Keeping it simple for update
-            rubric_description: newUrl,
-            rubric_last_edit: new Date().toISOString()
+            exam_name: title,
+            description: description,
           })
-          .eq('rubric_id', id);
+          .eq('exam_id', id);
 
         if (updateError) throw updateError;
-        toast.success("Cập nhật bài tập thành công!");
+        toast.success("Cập nhật bài thi thành công!");
       } else {
-        // Handle Creation logic (2 rows)
-        if (examFile) {
-          const examUrl = await uploadFileToSupabase(examFile, "exams");
-          const { error: examDbError } = await supabaseClient
-            .from('rubric')
-            .insert({
-              creator_profile_id: user?.id,
-              rubric_name: `[Đề thi] ${title}`,
-              rubric_description: examUrl,
-              rubric_create_time: new Date().toISOString(),
-              rubric_last_edit: new Date().toISOString()
-            });
-          if (examDbError) throw examDbError;
-        }
+        const insertData = selectedClasses.map(classId => ({
+          class_id: classId,
+          exam_name: title,
+          description: description,
+          max_score: 10,
+          created_by: user?.id,
+          created_at: new Date().toISOString()
+        }));
 
-        if (rubricFile) {
-          const rubricUrl = await uploadFileToSupabase(rubricFile, "rubrics");
-          const { error: rubricDbError } = await supabaseClient
-            .from('rubric')
-            .insert({
-              creator_profile_id: user?.id,
-              rubric_name: `[Đáp án] ${title}`,
-              rubric_description: rubricUrl,
-              rubric_create_time: new Date().toISOString(),
-              rubric_last_edit: new Date().toISOString()
-            });
-          if (rubricDbError) throw rubricDbError;
-        }
-        toast.success("Đã tạo bài tập/đề thi mới thành công!");
+        const { error: insertError } = await supabaseClient
+          .from('exam')
+          .insert(insertData);
+
+        if (insertError) throw insertError;
+        toast.success(`Đã giao bài tập mới cho ${selectedClasses.length} lớp thành công!`);
       }
 
       navigate("/rubrics");
     } catch (error: any) {
+      console.error("Save error:", error);
       toast.error(`Lỗi khi lưu bài tập: ${error.message || "Vui lòng thử lại sau."}`);
     } finally {
       setIsUploading(false);
     }
   };
 
+  const filteredClasses = classes.filter(cls => 
+    (cls.class_name || "").toLowerCase().includes(classSearchTerm.toLowerCase())
+  );
+
   if (loading) {
     return (
       <div className="flex flex-col items-center justify-center py-20 space-y-4">
         <Loader2 className="size-8 text-indigo-600 animate-spin" />
-        <p className="text-xs text-slate-500 font-medium">Đang tải thông tin bài tập...</p>
+        <p className="text-xs text-slate-500 font-medium">Đang tải thông tin...</p>
       </div>
     );
   }
@@ -223,11 +250,11 @@ export function CreateRubricPage() {
           >
             {isUploading ? (
               <>
-                <Loader2 className="size-4 mr-1.5 animate-spin" /> Đang tải lên...
+                <Loader2 className="size-4 mr-1.5 animate-spin" /> Đang xử lý...
               </>
             ) : (
               <>
-                <Save className="size-4 mr-1.5" /> Lưu bài tập
+                <Save className="size-4 mr-1.5" /> Giao bài tập
               </>
             )}
           </Button>
@@ -244,27 +271,95 @@ export function CreateRubricPage() {
             className="h-11 rounded-xl text-xs border-slate-200"
           />
         </div>
+        
         <div className="space-y-1.5">
-          <label className="text-xs font-bold text-slate-500 uppercase tracking-wide">Khối lớp áp dụng</label>
-          <Select value={grade} onValueChange={setGrade}>
-            <SelectTrigger className="h-11 rounded-xl text-xs border-slate-200 bg-white">
-              <SelectValue placeholder="Chọn khối lớp" />
-            </SelectTrigger>
-            <SelectContent className="rounded-xl text-xs">
-              <SelectItem value="Lớp 6">Khối Lớp 6</SelectItem>
-              <SelectItem value="Lớp 7">Khối Lớp 7</SelectItem>
-              <SelectItem value="Lớp 8">Khối Lớp 8</SelectItem>
-              <SelectItem value="Lớp 9">Khối Lớp 9</SelectItem>
-              <SelectItem value="Lớp 10">Khối Lớp 10</SelectItem>
-              <SelectItem value="Lớp 11">Khối Lớp 11</SelectItem>
-              <SelectItem value="Lớp 12">Khối Lớp 12 / Ôn thi Quốc Gia</SelectItem>
-            </SelectContent>
-          </Select>
+          <label className="text-xs font-bold text-slate-500 uppercase tracking-wide">Giao cho lớp học</label>
+          <Popover open={openClassPopover} onOpenChange={setOpenClassPopover}>
+            <PopoverTrigger asChild>
+              <Button
+                variant="outline"
+                role="combobox"
+                className="w-full h-11 justify-between text-xs rounded-xl border-slate-200 font-medium bg-white hover:bg-slate-50"
+              >
+                <span className="truncate">
+                  {selectedClasses.length === 0 
+                    ? "Chọn lớp học..." 
+                    : `Đã chọn ${selectedClasses.length} lớp`}
+                </span>
+                <ChevronsUpDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
+              </Button>
+            </PopoverTrigger>
+            <PopoverContent className="w-[300px] p-0 rounded-xl shadow-xl border-slate-100" align="start">
+              <div className="flex items-center border-b px-3 py-2.5 bg-slate-50/50">
+                <Search className="mr-2 h-4 w-4 shrink-0 opacity-50 text-slate-400" />
+                <input
+                  className="flex h-6 w-full rounded-md bg-transparent text-xs outline-none placeholder:text-slate-400"
+                  placeholder="Tìm lớp học..."
+                  value={classSearchTerm}
+                  onChange={(e) => setClassSearchTerm(e.target.value)}
+                />
+              </div>
+
+              <div className="max-h-[300px] overflow-y-auto p-1.5 custom-scrollbar">
+                {classes.length === 0 ? (
+                  <div className="py-8 text-center text-xs text-slate-400">
+                    Bạn chưa có lớp học nào.
+                  </div>
+                ) : filteredClasses.length === 0 ? (
+                  <div className="py-8 text-center text-xs text-slate-400">
+                    Không tìm thấy lớp học phù hợp.
+                  </div>
+                ) : (
+                  <div className="space-y-1">
+                    {filteredClasses.map((cls) => (
+                      <button
+                        key={cls.class_id}
+                        type="button"
+                        onClick={() => toggleClass(cls.class_id)}
+                        className={cn(
+                          "flex w-full items-center rounded-lg px-2.5 py-2.5 text-left text-xs transition-colors",
+                          selectedClasses.includes(cls.class_id) 
+                            ? "bg-indigo-50/50 text-indigo-700" 
+                            : "hover:bg-slate-50 text-slate-600"
+                        )}
+                      >
+                        <div className={cn(
+                          "mr-3 flex h-4 w-4 items-center justify-center rounded border transition-all",
+                          selectedClasses.includes(cls.class_id)
+                            ? "bg-indigo-600 border-indigo-600 text-white shadow-sm"
+                            : "bg-white border-slate-200"
+                        )}>
+                          {selectedClasses.includes(cls.class_id) && <Check className="h-3 w-3" strokeWidth={3} />}
+                        </div>
+                        <span className="font-semibold">{cls.class_name}</span>
+                      </button>
+                    ))}
+                  </div>
+                )}
+              </div>
+            </PopoverContent>
+          </Popover>
         </div>
       </div>
 
+      {selectedClasses.length > 0 && (
+        <div className="flex flex-wrap gap-2 px-1">
+          {selectedClasses.map(id => {
+            const cls = classes.find(c => c.class_id === id);
+            return (
+              <Badge key={id} variant="secondary" className="bg-indigo-50 text-indigo-700 border-indigo-100 py-1 px-3 rounded-full text-[10px] font-bold flex items-center gap-1 group">
+                {cls?.class_name || "Lớp học"}
+                <Trash2 
+                  className="size-3 cursor-pointer text-slate-300 group-hover:text-rose-500 transition-colors ml-1" 
+                  onClick={() => toggleClass(id)}
+                />
+              </Badge>
+            );
+          })}
+        </div>
+      )}
+
       <div className="grid md:grid-cols-2 gap-6">
-        {/* EXAM PDF UPLOAD */}
         <div className="space-y-3">
           <div className="px-1">
             <h2 className="text-sm font-bold text-slate-800 uppercase tracking-wider flex items-center gap-2">
@@ -320,7 +415,6 @@ export function CreateRubricPage() {
           </div>
         </div>
 
-        {/* RUBRIC PDF UPLOAD */}
         <div className="space-y-3">
           <div className="px-1">
             <h2 className="text-sm font-bold text-slate-800 uppercase tracking-wider flex items-center gap-2">
@@ -335,7 +429,7 @@ export function CreateRubricPage() {
             className={`relative border-2 border-dashed rounded-2xl p-8 transition-all flex flex-col items-center justify-center text-center cursor-pointer ${
               rubricFile 
                 ? "border-emerald-200 bg-emerald-50/30" 
-                : "border-slate-100 bg-white hover:border-emerald-200 hover:bg-slate-50/50"
+                : "border-slate-100 bg-white hover:border-indigo-200 hover:bg-slate-50/50"
             }`}
           >
             <input 

@@ -330,6 +330,10 @@ export function ClassroomListPage() {
                   <SelectValue placeholder="Chọn khối" />
                 </SelectTrigger>
                 <SelectContent className="rounded-xl text-xs">
+                  <SelectItem value="Khối 6">Học sinh Khối Lớp 6</SelectItem>
+                  <SelectItem value="Khối 7">Học sinh Khối Lớp 7</SelectItem>
+                  <SelectItem value="Khối 8">Học sinh Khối Lớp 8</SelectItem>
+                  <SelectItem value="Khối 9">Học sinh Khối Lớp 9</SelectItem>
                   <SelectItem value="Khối 10">Học sinh Khối Lớp 10</SelectItem>
                   <SelectItem value="Khối 11">Học sinh Khối Lớp 11</SelectItem>
                   <SelectItem value="Khối 12">Học sinh Khối Lớp 12</SelectItem>
