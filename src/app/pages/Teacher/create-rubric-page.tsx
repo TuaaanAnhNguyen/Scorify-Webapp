@@ -11,7 +11,8 @@ import {
   Loader2,
   Check,
   ChevronsUpDown,
-  Search
+  Search,
+  ExternalLink
 } from "lucide-react";
 import { Button } from "@/app/components/ui/button";
 import { Input } from "@/app/components/ui/input";
@@ -43,6 +44,11 @@ export function CreateRubricPage() {
   const [examFile, setExamFile] = React.useState<File | null>(null);
   const [rubricFile, setRubricFile] = React.useState<File | null>(null);
   
+  // States for existing data in edit mode
+  const [existingExamUrl, setExistingExamUrl] = React.useState<string | null>(null);
+  const [existingRubricUrl, setExistingRubricUrl] = React.useState<string | null>(null);
+  const [originalClassId, setOriginalClassId] = React.useState<string | null>(null);
+
   const examInputRef = React.useRef<HTMLInputElement>(null);
   const rubricInputRef = React.useRef<HTMLInputElement>(null);
 
@@ -59,18 +65,17 @@ export function CreateRubricPage() {
       
       try {
         setLoading(true);
-        console.log("FETCH START for teacher:", targetUserId);
         
-        const { data, error: classError } = await supabaseClient
+        // 1. Fetch Classes
+        const { data: classData, error: classError } = await supabaseClient
           .from('class')
           .select('*')
           .eq('teacher_profile_id', targetUserId);
 
         if (classError) throw classError;
-        
-        console.log("FETCH SUCCESS. Found:", data?.length, "classes");
-        setClasses(data || []);
+        setClasses(classData || []);
 
+        // 2. Fetch Exam Data if in Edit Mode
         if (isEditMode && id) {
           const { data: examData, error: examError } = await supabaseClient
             .from('exam')
@@ -82,6 +87,18 @@ export function CreateRubricPage() {
           if (examData) {
             setTitle(examData.exam_name);
             setSelectedClasses([examData.class_id]);
+            setOriginalClassId(examData.class_id);
+
+            // Parse description JSON
+            try {
+              if (examData.description) {
+                const meta = JSON.parse(examData.description);
+                setExistingExamUrl(meta.examUrl || null);
+                setExistingRubricUrl(meta.rubricUrl || null);
+              }
+            } catch (e) {
+              console.warn("Could not parse exam description JSON:", e);
+            }
           }
         }
       } catch (error: any) {
@@ -104,13 +121,18 @@ export function CreateRubricPage() {
       }
       if (type === "exam") setExamFile(file);
       else setRubricFile(file);
-      toast.success(`Đã chọn tệp: ${file.name}`);
+      toast.success(`Đã chọn tệp mới: ${file.name}`);
     }
   };
 
   const removeFile = (type: "exam" | "rubric") => {
-    if (type === "exam") setExamFile(null);
-    else setRubricFile(null);
+    if (type === "exam") {
+      setExamFile(null);
+      setExistingExamUrl(null);
+    } else {
+      setRubricFile(null);
+      setExistingRubricUrl(null);
+    }
   };
 
   const uploadFileToSupabase = async (file: File, folder: string) => {
@@ -134,6 +156,8 @@ export function CreateRubricPage() {
   };
 
   const toggleClass = (classId: string) => {
+    // In edit mode, we might want to restrict to single class update or allow moving
+    // For now, let's allow changing the class
     setSelectedClasses(prev => 
       prev.includes(classId) 
         ? prev.filter(id => id !== classId) 
@@ -152,41 +176,66 @@ export function CreateRubricPage() {
       return;
     }
 
+    // Validation for new creation
     if (!isEditMode && (!examFile || !rubricFile)) {
       toast.error("Vui lòng tải lên đầy đủ file đề thi và file đáp án/rubric!");
       return;
     }
 
-    const confirmSave = window.confirm(`Bạn có chắc chắn muốn giao bài tập này cho ${selectedClasses.length} lớp học đã chọn?`);
+    const confirmSave = window.confirm(
+      isEditMode 
+        ? "Bạn có chắc chắn muốn cập nhật bài tập này?" 
+        : `Bạn có chắc chắn muốn giao bài tập này cho ${selectedClasses.length} lớp học đã chọn?`
+    );
     if (!confirmSave) return;
 
     setIsUploading(true);
 
     try {
-      let examUrl = "";
-      let rubricUrl = "";
+      let examUrl = existingExamUrl;
+      let rubricUrl = existingRubricUrl;
 
+      // Upload new files if provided
       if (examFile) examUrl = await uploadFileToSupabase(examFile, "exams");
       if (rubricFile) rubricUrl = await uploadFileToSupabase(rubricFile, "rubrics");
 
       const description = JSON.stringify({
         examUrl: examUrl || null,
         rubricUrl: rubricUrl || null,
-        createdAt: new Date().toISOString()
+        updatedAt: new Date().toISOString(),
+        createdAt: isEditMode ? undefined : new Date().toISOString()
       });
 
       if (isEditMode) {
+        // UPDATE existing row
         const { error: updateError } = await supabaseClient
           .from('exam')
           .update({
             exam_name: title,
+            class_id: selectedClasses[0], // Update to the first selected class if multiple were chosen
             description: description,
           })
           .eq('exam_id', id);
 
         if (updateError) throw updateError;
+        
+        // If user selected MORE classes in edit mode, create new rows for them
+        const additionalClasses = selectedClasses.slice(1);
+        if (additionalClasses.length > 0) {
+          const extraData = additionalClasses.map(classId => ({
+            class_id: classId,
+            exam_name: title,
+            description: description,
+            max_score: 10,
+            created_by: user?.id,
+            created_at: new Date().toISOString()
+          }));
+          await supabaseClient.from('exam').insert(extraData);
+        }
+
         toast.success("Cập nhật bài thi thành công!");
       } else {
+        // CREATE new rows (one per class)
         const insertData = selectedClasses.map(classId => ({
           class_id: classId,
           exam_name: title,
@@ -254,7 +303,7 @@ export function CreateRubricPage() {
               </>
             ) : (
               <>
-                <Save className="size-4 mr-1.5" /> Giao bài tập
+                <Save className="size-4 mr-1.5" /> {isEditMode ? "Lưu thay đổi" : "Giao bài tập"}
               </>
             )}
           </Button>
@@ -360,6 +409,7 @@ export function CreateRubricPage() {
       )}
 
       <div className="grid md:grid-cols-2 gap-6">
+        {/* EXAM PDF SECTION */}
         <div className="space-y-3">
           <div className="px-1">
             <h2 className="text-sm font-bold text-slate-800 uppercase tracking-wider flex items-center gap-2">
@@ -370,9 +420,9 @@ export function CreateRubricPage() {
           </div>
 
           <div 
-            onClick={() => !examFile && examInputRef.current?.click()}
+            onClick={() => !examFile && !existingExamUrl && examInputRef.current?.click()}
             className={`relative border-2 border-dashed rounded-2xl p-8 transition-all flex flex-col items-center justify-center text-center cursor-pointer ${
-              examFile 
+              examFile || existingExamUrl
                 ? "border-indigo-200 bg-indigo-50/30" 
                 : "border-slate-100 bg-white hover:border-indigo-200 hover:bg-slate-50/50"
             }`}
@@ -392,7 +442,7 @@ export function CreateRubricPage() {
                 </div>
                 <div className="space-y-1">
                   <p className="text-xs font-bold text-slate-800 truncate px-4">{examFile.name}</p>
-                  <p className="text-[10px] text-slate-400">{(examFile.size / 1024 / 1024).toFixed(2)} MB • Định dạng PDF</p>
+                  <p className="text-[10px] text-slate-400">{(examFile.size / 1024 / 1024).toFixed(2)} MB • Mới tải lên</p>
                 </div>
                 <Button 
                   variant="ghost" 
@@ -401,6 +451,28 @@ export function CreateRubricPage() {
                   className="text-rose-600 hover:text-rose-700 hover:bg-rose-50 text-[10px] font-bold h-7"
                 >
                   <Trash2 className="size-3.5 mr-1" /> Gỡ bỏ tệp
+                </Button>
+              </div>
+            ) : existingExamUrl ? (
+              <div className="space-y-3 w-full">
+                <div className="size-12 bg-indigo-100 text-indigo-600 rounded-xl flex items-center justify-center mx-auto shadow-inner">
+                  <FileText className="size-6" />
+                </div>
+                <div className="space-y-1">
+                  <p className="text-xs font-bold text-slate-800 truncate px-4">Tệp đề thi hiện tại</p>
+                  <p className="text-[10px] text-indigo-500 font-bold flex items-center justify-center gap-1">
+                    <a href={existingExamUrl} target="_blank" rel="noopener noreferrer" className="hover:underline flex items-center gap-1">
+                      <ExternalLink className="size-3" /> Xem tệp cũ
+                    </a>
+                  </p>
+                </div>
+                <Button 
+                  variant="ghost" 
+                  size="sm" 
+                  onClick={(e) => { e.stopPropagation(); removeFile("exam"); }}
+                  className="text-rose-600 hover:text-rose-700 hover:bg-rose-50 text-[10px] font-bold h-7"
+                >
+                  <Trash2 className="size-3.5 mr-1" /> Thay đổi tệp
                 </Button>
               </div>
             ) : (
@@ -415,6 +487,7 @@ export function CreateRubricPage() {
           </div>
         </div>
 
+        {/* RUBRIC PDF SECTION */}
         <div className="space-y-3">
           <div className="px-1">
             <h2 className="text-sm font-bold text-slate-800 uppercase tracking-wider flex items-center gap-2">
@@ -425,11 +498,11 @@ export function CreateRubricPage() {
           </div>
 
           <div 
-            onClick={() => !rubricFile && rubricInputRef.current?.click()}
+            onClick={() => !rubricFile && !existingRubricUrl && rubricInputRef.current?.click()}
             className={`relative border-2 border-dashed rounded-2xl p-8 transition-all flex flex-col items-center justify-center text-center cursor-pointer ${
-              rubricFile 
+              rubricFile || existingRubricUrl
                 ? "border-emerald-200 bg-emerald-50/30" 
-                : "border-slate-100 bg-white hover:border-indigo-200 hover:bg-slate-50/50"
+                : "border-slate-100 bg-white hover:border-emerald-200 hover:bg-slate-50/50"
             }`}
           >
             <input 
@@ -447,7 +520,7 @@ export function CreateRubricPage() {
                 </div>
                 <div className="space-y-1">
                   <p className="text-xs font-bold text-slate-800 truncate px-4">{rubricFile.name}</p>
-                  <p className="text-[10px] text-slate-400">{(rubricFile.size / 1024 / 1024).toFixed(2)} MB • Định dạng PDF</p>
+                  <p className="text-[10px] text-slate-400">{(rubricFile.size / 1024 / 1024).toFixed(2)} MB • Mới tải lên</p>
                 </div>
                 <Button 
                   variant="ghost" 
@@ -456,6 +529,28 @@ export function CreateRubricPage() {
                   className="text-rose-600 hover:text-rose-700 hover:bg-rose-50 text-[10px] font-bold h-7"
                 >
                   <Trash2 className="size-3.5 mr-1" /> Gỡ bỏ tệp
+                </Button>
+              </div>
+            ) : existingRubricUrl ? (
+              <div className="space-y-3 w-full">
+                <div className="size-12 bg-emerald-100 text-emerald-600 rounded-xl flex items-center justify-center mx-auto shadow-inner">
+                  <FileCheck className="size-6" />
+                </div>
+                <div className="space-y-1">
+                  <p className="text-xs font-bold text-slate-800 truncate px-4">Tệp đáp án hiện tại</p>
+                  <p className="text-[10px] text-emerald-500 font-bold flex items-center justify-center gap-1">
+                    <a href={existingRubricUrl} target="_blank" rel="noopener noreferrer" className="hover:underline flex items-center gap-1">
+                      <ExternalLink className="size-3" /> Xem tệp cũ
+                    </a>
+                  </p>
+                </div>
+                <Button 
+                  variant="ghost" 
+                  size="sm" 
+                  onClick={(e) => { e.stopPropagation(); removeFile("rubric"); }}
+                  className="text-rose-600 hover:text-rose-700 hover:bg-rose-50 text-[10px] font-bold h-7"
+                >
+                  <Trash2 className="size-3.5 mr-1" /> Thay đổi tệp
                 </Button>
               </div>
             ) : (
