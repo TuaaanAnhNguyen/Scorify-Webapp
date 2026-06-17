@@ -1,0 +1,105 @@
+Detect POST Body: {
+  "properties": {
+    "file": {
+      "type": "string",
+      "contentMediaType": "application/octet-stream",
+      "title": "File"
+    }
+  },
+  "type": "object",
+  "required": [
+    "file"
+  ],
+  "title": "Body_analyze_image_documents_detect_post"
+}
+Detect Response: {
+  "properties": {
+    "document_lines": {
+      "items": {
+        "$ref": "#/components/schemas/app__routers__documents__DocumentLineModel"
+      },
+      "type": "array",
+      "title": "Document Lines",
+      "description": "Danh sách các dòng tài liệu đã được phân tích.",
+      "examples": [
+        [
+          {
+            "content": "Giả sử ta có phương trình bậc hai sau đây:",
+            "line_index": 0
+          },
+          {
+            "content": "$$ax^2 + bx + c = 0$$",
+            "line_index": 1
+          },
+          {
+            "content": "Trong đó, điều kiện tiên quyết là $a \\\\neq 0$.",
+            "line_index": 2
+          }
+        ]
+      ]
+    }
+  },
+  "type": "object",
+  "required": [
+    "document_lines"
+  ],
+  "title": "LayoutDectectResponse"
+}
+Grading POST Body: {
+  "properties": {
+    "file": {
+      "type": "string",
+      "contentMediaType": "application/octet-stream",
+      "title": "File"
+    },
+    "document": {
+      "type": "string",
+      "title": "Document"
+    }
+  },
+  "type": "object",
+  "required": [
+    "file",
+    "document"
+  ],
+  "title": "Body_grade_by_rubrics_gradings_rubrics_post"
+}
+Grading Response: {
+  "properties": {
+    "document_lines": {
+      "items": {
+        "$ref": "#/components/schemas/app__routers__gradings__DocumentLineModel"
+      },
+      "type": "array",
+      "title": "Document Lines",
+      "description": "Danh sách các dòng tài liệu đã được phân tích và chấm điểm.",
+      "examples": [
+        [
+          {
+            "content": "Giả sử ta có phương trình bậc hai sau đây:",
+            "feedback": "Học sinh chép sai biểu thức đề bài...",
+            "line_index": 0,
+            "score": 0.25
+          },
+          {
+            "content": "$$ax^2 + bx + c = 0$$",
+            "feedback": "Đúng so với rubric.",
+            "line_index": 1,
+            "score": 0.25
+          },
+          {
+            "content": "Trong đó, điều kiện tiên quyết là $a \\\\neq 0$.",
+            "feedback": "Sai vì $a \\\\neq 1$.",
+            "line_index": 2,
+            "score": 0
+          }
+        ]
+      ]
+    }
+  },
+  "type": "object",
+  "required": [
+    "document_lines"
+  ],
+  "title": "GradingAnalysisResponse"
+}

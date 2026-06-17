@@ -1,0 +1,162 @@
+{
+  "/documents/detect": {
+    "post": {
+      "tags": [
+        "Layout Dectection Endpoint"
+      ],
+      "summary": "Phân tích và chuyển đổi hình ảnh sang văn bản",
+      "description": "Nhận file ảnh và trả về văn bản dạng markdown latex.",
+      "operationId": "analyze_image_documents_detect_post",
+      "requestBody": {
+        "content": {
+          "multipart/form-data": {
+            "schema": {
+              "$ref": "#/components/schemas/Body_analyze_image_documents_detect_post"
+            }
+          }
+        },
+        "required": true
+      },
+      "responses": {
+        "200": {
+          "description": "Successful Response",
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/LayoutDectectResponse"
+              }
+            }
+          }
+        },
+        "401": {
+          "description": "Lỗi do file gửi lên không đúng định dạng.",
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/app__routers__documents__ErrorResponseModel"
+              },
+              "example": {
+                "status": "error",
+                "code": "INVALID_FILE_TYPE",
+                "message": "Định dạng file không hợp lệ. Hệ thống chỉ chấp nhận ảnh (*.png, *.jpg, *.jpeg,...)."
+              }
+            }
+          }
+        },
+        "402": {
+          "description": "Lỗi trong quá trình xử lí ảnh hoặc lỗi nội bộ.",
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/app__routers__documents__ErrorResponseModel"
+              },
+              "example": {
+                "status": "error",
+                "code": "SYSTEM_ERROR",
+                "message": "Đã có lỗi xảy ra trong quá trình xử lý hình ảnh."
+              }
+            }
+          }
+        },
+        "422": {
+          "description": "Validation Error",
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/HTTPValidationError"
+              }
+            }
+          }
+        }
+      }
+    }
+  },
+  "/gradings/rubrics": {
+    "post": {
+      "tags": [
+        "Handwritten Grading Endpoint"
+      ],
+      "summary": "Phân tích và chấm điểm tài liệu",
+      "description": "Nhận file/text và trả về kết quả chấm điểm chi tiết theo từng dòng ở định dạng cấu trúc JSON.",
+      "operationId": "grade_by_rubrics_gradings_rubrics_post",
+      "requestBody": {
+        "content": {
+          "multipart/form-data": {
+            "schema": {
+              "$ref": "#/components/schemas/Body_grade_by_rubrics_gradings_rubrics_post"
+            }
+          }
+        },
+        "required": true
+      },
+      "responses": {
+        "200": {
+          "description": "Successful Response",
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/GradingAnalysisResponse"
+              }
+            }
+          }
+        },
+        "401": {
+          "description": "Lỗi do file gửi lên không đúng định dạng.",
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/app__routers__gradings__ErrorResponseModel"
+              },
+              "example": {
+                "status": "error",
+                "code": "INVALID_FILE_TYPE",
+                "message": "Hệ thống chỉ chấp nhận file pdf."
+              }
+            }
+          }
+        },
+        "402": {
+          "description": "Lỗi trong quá trình chấm điểm hoặc lỗi nội bộ.",
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/app__routers__gradings__ErrorResponseModel"
+              },
+              "example": {
+                "status": "error",
+                "code": "SYSTEM_ERROR",
+                "message": "Đã có lỗi xảy ra trong quá trình chấm điểm."
+              }
+            }
+          }
+        },
+        "422": {
+          "description": "Validation Error",
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/HTTPValidationError"
+              }
+            }
+          }
+        }
+      }
+    }
+  },
+  "/": {
+    "get": {
+      "summary": "Root",
+      "operationId": "root__get",
+      "responses": {
+        "200": {
+          "description": "Successful Response",
+          "content": {
+            "application/json": {
+              "schema": {}
+            }
+          }
+        }
+      }
+    }
+  }
+}
