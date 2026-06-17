@@ -103,9 +103,18 @@ export function RubricDetailPage() {
               <FileText className="size-4 text-indigo-500" />
               File PDF Đề thi
             </CardTitle>
-            <Button variant="ghost" size="sm" className="h-8 text-indigo-600 hover:text-indigo-700 hover:bg-indigo-50 text-[10px] font-bold">
-              <Download className="size-3.5 mr-1" /> Tải xuống
-            </Button>
+            {rubric.examFileUrl && (
+              <Button 
+                variant="ghost" 
+                size="sm" 
+                asChild
+                className="h-8 text-indigo-600 hover:text-indigo-700 hover:bg-indigo-50 text-[10px] font-bold"
+              >
+                <a href={rubric.examFileUrl} target="_blank" rel="noopener noreferrer">
+                  <Download className="size-3.5 mr-1" /> Tải xuống
+                </a>
+              </Button>
+            )}
           </CardHeader>
           <CardContent className="p-4 bg-slate-50/50">
             <div className="flex items-center gap-3 p-3 bg-white border border-slate-200 rounded-xl">
@@ -114,11 +123,15 @@ export function RubricDetailPage() {
               </div>
               <div className="min-w-0 flex-1">
                 <p className="text-xs font-bold text-slate-800 truncate">{rubric.examFileName || "De_thi_chinh_thuc.pdf"}</p>
-                <p className="text-[10px] text-slate-400">1.2 MB • Định dạng PDF</p>
+                <p className="text-[10px] text-slate-400">Định dạng PDF</p>
               </div>
-              <Button variant="ghost" size="icon" className="size-8 rounded-lg text-slate-400 hover:text-indigo-600">
-                <ExternalLink className="size-4" />
-              </Button>
+              {rubric.examFileUrl && (
+                <Button variant="ghost" size="icon" asChild className="size-8 rounded-lg text-slate-400 hover:text-indigo-600">
+                  <a href={rubric.examFileUrl} target="_blank" rel="noopener noreferrer">
+                    <ExternalLink className="size-4" />
+                  </a>
+                </Button>
+              )}
             </div>
           </CardContent>
         </Card>
@@ -129,9 +142,18 @@ export function RubricDetailPage() {
               <FileCheck className="size-4 text-emerald-500" />
               File PDF Đáp án & Rubric
             </CardTitle>
-            <Button variant="ghost" size="sm" className="h-8 text-emerald-600 hover:text-emerald-700 hover:bg-emerald-50 text-[10px] font-bold">
-              <Download className="size-3.5 mr-1" /> Tải xuống
-            </Button>
+            {rubric.rubricFileUrl && (
+              <Button 
+                variant="ghost" 
+                size="sm" 
+                asChild
+                className="h-8 text-emerald-600 hover:text-emerald-700 hover:bg-emerald-50 text-[10px] font-bold"
+              >
+                <a href={rubric.rubricFileUrl} target="_blank" rel="noopener noreferrer">
+                  <Download className="size-3.5 mr-1" /> Tải xuống
+                </a>
+              </Button>
+            )}
           </CardHeader>
           <CardContent className="p-4 bg-slate-50/50">
             <div className="flex items-center gap-3 p-3 bg-white border border-slate-200 rounded-xl">
@@ -140,11 +162,15 @@ export function RubricDetailPage() {
               </div>
               <div className="min-w-0 flex-1">
                 <p className="text-xs font-bold text-slate-800 truncate">{rubric.rubricFileName || "Barem_cham_chi_tiet.pdf"}</p>
-                <p className="text-[10px] text-slate-400">0.8 MB • Định dạng PDF</p>
+                <p className="text-[10px] text-slate-400">Định dạng PDF</p>
               </div>
-              <Button variant="ghost" size="icon" className="size-8 rounded-lg text-slate-400 hover:text-emerald-600">
-                <ExternalLink className="size-4" />
-              </Button>
+              {rubric.rubricFileUrl && (
+                <Button variant="ghost" size="icon" asChild className="size-8 rounded-lg text-slate-400 hover:text-emerald-600">
+                  <a href={rubric.rubricFileUrl} target="_blank" rel="noopener noreferrer">
+                    <ExternalLink className="size-4" />
+                  </a>
+                </Button>
+              )}
             </div>
           </CardContent>
         </Card>

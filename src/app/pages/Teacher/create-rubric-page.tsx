@@ -7,48 +7,63 @@ import {
   FileText,
   UploadCloud,
   FileCheck,
-  Sparkles
+  Sparkles,
+  Loader2
 } from "lucide-react";
 import { Button } from "@/app/components/ui/button";
 import { Input } from "@/app/components/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/app/components/ui/select";
 import { toast } from "sonner";
+import { supabaseClient } from "@/app/services/supabaseClient";
+import { useAuth } from "@/app/context/AuthContext";
 
 export function CreateRubricPage() {
   const { id } = useParams();
   const navigate = useNavigate();
+  const { user } = useAuth();
   const isEditMode = !!id;
 
   const [title, setTitle] = React.useState("");
   const [grade, setGrade] = React.useState("Lớp 12");
+  const [isUploading, setIsUploading] = React.useState(false);
+  const [loading, setLoading] = React.useState(isEditMode);
   
   const [examFile, setExamFile] = React.useState<File | null>(null);
   const [rubricFile, setRubricFile] = React.useState<File | null>(null);
+  const [existingFileUrl, setExistingFileUrl] = React.useState<string | null>(null);
   
   const examInputRef = React.useRef<HTMLInputElement>(null);
   const rubricInputRef = React.useRef<HTMLInputElement>(null);
 
-  // Pull existing list array for modifications
-  const getStoredRubrics = () => {
-    const saved = localStorage.getItem("scorify_mock_rubrics");
-    try {
-      return saved ? JSON.parse(saved) : [];
-    } catch (e) {
-      return [];
-    }
-  };
-
   React.useEffect(() => {
-    if (isEditMode) {
-      const stored = getStoredRubrics();
-      if (Array.isArray(stored)) {
-        const activeRubric = stored.find((r: any) => r.id === id);
-        if (activeRubric) {
-          setTitle(activeRubric.title || "");
-          setGrade(activeRubric.grade || "Lớp 12");
+    const fetchRubric = async () => {
+      if (isEditMode && id) {
+        try {
+          setLoading(true);
+          const { data, error } = await supabaseClient
+            .from('rubric')
+            .select('*')
+            .eq('rubric_id', id)
+            .single();
+
+          if (error) throw error;
+
+          if (data) {
+            // Clean title by removing prefix tags if they exist
+            const cleanTitle = data.rubric_name.replace(/^\[(Đề thi|Đáp án)\] /, "");
+            setTitle(cleanTitle);
+            setExistingFileUrl(data.rubric_description);
+          }
+        } catch (error) {
+          console.error("Error fetching rubric:", error);
+          toast.error("Không thể tải thông tin bài tập.");
+        } finally {
+          setLoading(false);
         }
       }
-    }
+    };
+
+    fetchRubric();
   }, [id, isEditMode]);
 
   const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>, type: "exam" | "rubric") => {
@@ -69,8 +84,33 @@ export function CreateRubricPage() {
     else setRubricFile(null);
   };
 
+  const uploadFileToSupabase = async (file: File, folder: string) => {
+    if (!user) {
+      throw new Error("Người dùng chưa đăng nhập!");
+    }
+
+    const fileExt = file.name.split('.').pop();
+    const fileName = `${Math.random().toString(36).substring(2)}_${Date.now()}.${fileExt}`;
+    const filePath = `${user.id}/${folder}/${fileName}`;
+
+    const { data, error } = await supabaseClient.storage
+      .from('Scorify_rubrics')
+      .upload(filePath, file);
+
+    if (error) {
+      console.error("Storage upload error:", error);
+      throw error;
+    }
+
+    const { data: { publicUrl } } = supabaseClient.storage
+      .from('Scorify_rubrics')
+      .getPublicUrl(filePath);
+
+    return publicUrl;
+  };
+
   // Mock Save Flow updating local storage
-  const handleSaveRubric = () => {
+  const handleSaveRubric = async () => {
     if (!title.trim()) {
       toast.error("Vui lòng điền tên bài tập / đề thi!");
       return;
@@ -81,37 +121,83 @@ export function CreateRubricPage() {
       return;
     }
 
-    const currentList = getStoredRubrics();
-    const listToUpdate = Array.isArray(currentList) ? currentList : [];
+    const confirmSave = window.confirm("Bạn có chắc chắn muốn lưu bài tập này và tải các tệp lên hệ thống?");
+    if (!confirmSave) return;
 
-    if (isEditMode) {
-      const updatedList = listToUpdate.map((item: any) => {
-        if (item.id === id) {
-          return { ...item, title, grade };
+    setIsUploading(true);
+
+    try {
+      if (isEditMode) {
+        // Handle Update logic
+        let newUrl = existingFileUrl;
+        
+        // If user uploaded a new file in edit mode, upload it first
+        // In edit mode, we only handle one file (the one that matches the row)
+        // For simplicity, we'll check both but typically only one row is edited at a time
+        const fileToUpload = examFile || rubricFile;
+        if (fileToUpload) {
+          newUrl = await uploadFileToSupabase(fileToUpload, "updates");
         }
-        return item;
-      });
-      localStorage.setItem("scorify_mock_rubrics", JSON.stringify(updatedList));
-      toast.success("Cập nhật thông tin bài tập thành công!");
-    } else {
-      const newEntry = {
-        id: `R-${Math.floor(100 + Math.random() * 900)}`,
-        title,
-        grade,
-        type: "PDF Document",
-        totalQuestions: "--",
-        tuLuanCount: "--",
-        lastUsed: "Vừa xong",
-        linkedFolders: 0,
-        examFileName: examFile?.name,
-        rubricFileName: rubricFile?.name
-      };
-      localStorage.setItem("scorify_mock_rubrics", JSON.stringify([newEntry, ...listToUpdate]));
-      toast.success("Đã tạo bài tập/đề thi mới từ tệp PDF thành công!");
-    }
 
-    navigate("/rubrics");
+        const { error: updateError } = await supabaseClient
+          .from('rubric')
+          .update({
+            rubric_name: title, // Keeping it simple for update
+            rubric_description: newUrl,
+            rubric_last_edit: new Date().toISOString()
+          })
+          .eq('rubric_id', id);
+
+        if (updateError) throw updateError;
+        toast.success("Cập nhật bài tập thành công!");
+      } else {
+        // Handle Creation logic (2 rows)
+        if (examFile) {
+          const examUrl = await uploadFileToSupabase(examFile, "exams");
+          const { error: examDbError } = await supabaseClient
+            .from('rubric')
+            .insert({
+              creator_profile_id: user?.id,
+              rubric_name: `[Đề thi] ${title}`,
+              rubric_description: examUrl,
+              rubric_create_time: new Date().toISOString(),
+              rubric_last_edit: new Date().toISOString()
+            });
+          if (examDbError) throw examDbError;
+        }
+
+        if (rubricFile) {
+          const rubricUrl = await uploadFileToSupabase(rubricFile, "rubrics");
+          const { error: rubricDbError } = await supabaseClient
+            .from('rubric')
+            .insert({
+              creator_profile_id: user?.id,
+              rubric_name: `[Đáp án] ${title}`,
+              rubric_description: rubricUrl,
+              rubric_create_time: new Date().toISOString(),
+              rubric_last_edit: new Date().toISOString()
+            });
+          if (rubricDbError) throw rubricDbError;
+        }
+        toast.success("Đã tạo bài tập/đề thi mới thành công!");
+      }
+
+      navigate("/rubrics");
+    } catch (error: any) {
+      toast.error(`Lỗi khi lưu bài tập: ${error.message || "Vui lòng thử lại sau."}`);
+    } finally {
+      setIsUploading(false);
+    }
   };
+
+  if (loading) {
+    return (
+      <div className="flex flex-col items-center justify-center py-20 space-y-4">
+        <Loader2 className="size-8 text-indigo-600 animate-spin" />
+        <p className="text-xs text-slate-500 font-medium">Đang tải thông tin bài tập...</p>
+      </div>
+    );
+  }
 
   return (
     <div className="space-y-6 max-w-5xl mx-auto pb-12 animate-in fade-in duration-200">
@@ -130,8 +216,20 @@ export function CreateRubricPage() {
         </div>
 
         <div className="flex items-center gap-3">
-          <Button onClick={handleSaveRubric} className="bg-indigo-600 hover:bg-indigo-700 text-white font-bold text-xs h-10 px-4 rounded-xl shadow-md">
-            <Save className="size-4 mr-1.5" /> Lưu bài tập
+          <Button 
+            onClick={handleSaveRubric} 
+            disabled={isUploading}
+            className="bg-indigo-600 hover:bg-indigo-700 text-white font-bold text-xs h-10 px-4 rounded-xl shadow-md min-w-[120px]"
+          >
+            {isUploading ? (
+              <>
+                <Loader2 className="size-4 mr-1.5 animate-spin" /> Đang tải lên...
+              </>
+            ) : (
+              <>
+                <Save className="size-4 mr-1.5" /> Lưu bài tập
+              </>
+            )}
           </Button>
         </div>
       </div>
@@ -153,6 +251,10 @@ export function CreateRubricPage() {
               <SelectValue placeholder="Chọn khối lớp" />
             </SelectTrigger>
             <SelectContent className="rounded-xl text-xs">
+              <SelectItem value="Lớp 6">Khối Lớp 6</SelectItem>
+              <SelectItem value="Lớp 7">Khối Lớp 7</SelectItem>
+              <SelectItem value="Lớp 8">Khối Lớp 8</SelectItem>
+              <SelectItem value="Lớp 9">Khối Lớp 9</SelectItem>
               <SelectItem value="Lớp 10">Khối Lớp 10</SelectItem>
               <SelectItem value="Lớp 11">Khối Lớp 11</SelectItem>
               <SelectItem value="Lớp 12">Khối Lớp 12 / Ôn thi Quốc Gia</SelectItem>
