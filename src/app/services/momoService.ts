@@ -1,4 +1,5 @@
 // src/app/services/momoService.ts
+
 import { supabaseClient } from "./supabaseClient";
 
 export const momoService = {
@@ -10,8 +11,7 @@ export const momoService = {
           amount, 
           subscriptionType: planId, 
           isTeacherWorkspace,
-          // 🎯 Đảm bảo truyền chính xác URL hiện tại kèm path (ví dụ: localhost:5173/workspace/pricing)
-          redirectUrl: `${window.location.origin}${window.location.pathname}?status=success`
+          redirectUrl: `${window.location.origin}${window.location.pathname}`
         }
       });
 

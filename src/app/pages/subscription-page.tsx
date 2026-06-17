@@ -53,87 +53,100 @@ export function SubscriptionPage() {
     loadData();
   }, []);
 
-  // 2. 🎯 TỐI ƯU: Hứng callback thành công, hiển thị thông báo và ép Context tải lại dữ liệu mới nhất
-  useEffect(() => {
-    const status = searchParams.get("status");
-    const resultCode = searchParams.get("resultCode");
+  // 2. Handle MoMo Redirect Callback
+useEffect(() => {
+  const resultCode = searchParams.get("resultCode");
+  const extraData = searchParams.get("extraData");
+  const orderId = searchParams.get("orderId");
+  const message = searchParams.get("message");
 
-    // Lấy thêm các tham số đi kèm mà MoMo đính vào URL khi redirect về
-    const amount = searchParams.get("amount");
-    const orderId = searchParams.get("orderId");
-    const transId =
-      searchParams.get("transId") || "MOCK_TRANS_ID_" + Date.now();
-    const extraData = searchParams.get("extraData");
+  // Prevent running multiple times
+  if (!resultCode) return;
 
-    async function handleSuccessPayment() {
-      if (!user?.id) return;
+  async function handleSuccessPayment() {
+    if (!user?.id) {
+      toast.error("Phiên đăng nhập hết hạn. Vui lòng đăng nhập lại.");
+      return;
+    }
 
-      try {
-        const loadingToast = toast.loading(
-          "MoMo xác nhận thành công. Đang cập nhật quyền truy cập tài khoản...",
-        );
+    try {
+      const loadingToast = toast.loading(
+        "Đang xác nhận thanh toán và cập nhật tài khoản..."
+      );
 
-        // 🎯 Khởi tạo một đối tượng Client Supabase thông thường (hoặc gọi qua Service)
-        // Giải mã extraData để lấy Plan ID nếu cần, hoặc lấy luôn gói hiện tại bạn lưu local
-        let planId = "864a1a95-1945-4533-bf10-47b9ae67abe0"; // Mặc định gói 1 tháng nếu lỗi giải mã
-        if (extraData) {
-          try {
-            const decoded = JSON.parse(atob(extraData));
-            if (decoded.subscriptionType) planId = decoded.subscriptionType;
-          } catch (e) {
-            console.error("Lỗi parse extraData:", e);
+      // Parse planId from extraData (sent from momo-create-order)
+      let planId = "864a1a95-1945-4533-bf10-47b9ae67abe0"; // fallback
+
+      if (extraData) {
+        try {
+          const decoded = JSON.parse(atob(extraData));
+          if (decoded.subscriptionType) {
+            planId = decoded.subscriptionType;
           }
+        } catch (e) {
+          console.warn("Không parse được extraData:", e);
         }
-
-        const startDate = new Date();
-        const endDate = new Date();
-
-        // Tính toán hạn dùng giống Backend
-        if (planId === "864a1a95-1945-4533-bf10-47b9ae67abe0")
-          endDate.setMonth(startDate.getMonth() + 1);
-        else if (planId === "b2ad771c-bd2a-465a-9ebc-af8040958e8d")
-          endDate.setMonth(startDate.getMonth() + 3);
-        else endDate.setMonth(startDate.getMonth() + 12);
-
-        // 🎯 ÉP CẬP NHẬT DIRECT VÀO DATABASE TỪ CLIENT LUÔN!
-        await subscriptionService.upsertUserSubscription({
-          p_profile_id: user.id,
-          p_plan_id: planId,
-          p_start_date: startDate.toISOString(),
-          p_end_date: endDate.toISOString(),
-        });
-
-        toast.dismiss(loadingToast);
-        toast.success(
-          "🎉 Tài khoản của bạn đã được nâng cấp lên Premium thành công!",
-        );
-
-        // Làm sạch URL thanh toán
-        const newParams = new URLSearchParams(searchParams);
-        [
-          "status",
-          "resultCode",
-          "amount",
-          "orderId",
-          "transId",
-          "extraData",
-          "signature",
-        ].forEach((p) => newParams.delete(p));
-        setSearchParams(newParams);
-
-        refreshSession(); // Cập nhật lại Context trạng thái User
-      } catch (err: any) {
-        toast.error(`Không thể kích hoạt gói tự động: ${err.message}`);
       }
-    }
 
-    // 🎯 Nếu MoMo báo thành công (status=success hoặc resultCode=0)
-    if (status === "success" || resultCode === "0") {
-      handleSuccessPayment();
-    } else if (status === "error" || resultCode === "9000") {
-      toast.error("❌ Giao dịch đã bị hủy bỏ hoặc thất bại từ cổng MoMo.");
+      // Calculate dates
+      const startDate = new Date();
+      const endDate = new Date(startDate);
+
+      if (planId === "864a1a95-1945-4533-bf10-47b9ae67abe0") {
+        endDate.setMonth(endDate.getMonth() + 1);
+      } else if (planId === "b2ad771c-bd2a-465a-9ebc-af8040958e8d") {
+        endDate.setMonth(endDate.getMonth() + 3);
+      } else if (planId === "1facbe75-4a9a-457d-9675-0b2695c220b0") {
+        endDate.setMonth(endDate.getMonth() + 12);
+      } else {
+        endDate.setMonth(endDate.getMonth() + 1); // safe fallback
+      }
+
+      // Call upsert
+      await subscriptionService.upsertUserSubscription({
+        p_profile_id: user.id,
+        p_plan_id: planId,
+        p_start_date: startDate.toISOString(),
+        p_end_date: endDate.toISOString(),
+      });
+
+      toast.dismiss(loadingToast);
+      toast.success("🎉 Tài khoản của bạn đã được nâng cấp thành công!");
+
+      refreshSession();
+
+    } catch (err: any) {
+      console.error("handleSuccessPayment error:", err);
+      toast.error(`Không thể kích hoạt gói: ${err.message || "Lỗi không xác định"}`);
     }
-  }, [searchParams, user, refreshSession, setSearchParams]);
+  }
+
+  // ==================== MAIN LOGIC ====================
+  if (resultCode === "0") {
+    handleSuccessPayment();
+  } 
+  else if (resultCode) {
+    // Any other resultCode means failure or user cancelled
+    const errorMsg = message || "Giao dịch không thành công hoặc đã bị hủy.";
+    toast.error(`❌ ${errorMsg} (Mã: ${resultCode})`);
+  }
+
+  // Always clean URL after processing
+  const newParams = new URLSearchParams(searchParams);
+  [
+    "resultCode",
+    "status",
+    "amount",
+    "orderId",
+    "transId",
+    "extraData",
+    "signature",
+    "message",
+  ].forEach((p) => newParams.delete(p));
+
+  setSearchParams(newParams, { replace: true });
+
+}, [searchParams, user, refreshSession, setSearchParams]);
 
   const handleSubscribe = async (plan: SubscriptionPlan) => {
     if (!user?.id) {
