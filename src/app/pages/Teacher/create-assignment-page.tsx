@@ -96,6 +96,10 @@ export function CreateAssignmentPage() {
                 <SelectValue placeholder="Chọn khối lớp" />
               </SelectTrigger>
               <SelectContent className="rounded-xl text-xs">
+                <SelectItem value="Lớp 6">Học sinh Khối Lớp 6</SelectItem>
+                <SelectItem value="Lớp 7">Học sinh Khối Lớp 7</SelectItem>
+                <SelectItem value="Lớp 8">Học sinh Khối Lớp 8</SelectItem>
+                <SelectItem value="Lớp 9">Học sinh Khối Lớp 9</SelectItem>
                 <SelectItem value="Lớp 10">Học sinh Khối Lớp 10</SelectItem>
                 <SelectItem value="Lớp 11">Học sinh Khối Lớp 11</SelectItem>
                 <SelectItem value="Lớp 12">Học sinh Khối Lớp 12</SelectItem>
