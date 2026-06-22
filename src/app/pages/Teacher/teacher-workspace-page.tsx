@@ -1,4 +1,4 @@
-// src/app/pages/WorkspacePage.tsx
+// src/app/pages/Teacher/teacher-workspace-page.tsx
 
 import { useEffect, useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
@@ -14,6 +14,11 @@ import {
   Layers,
   Loader2,
 } from "lucide-react";
+import ReactMarkdown from "react-markdown";
+import remarkMath from "remark-math";
+import rehypeKatex from "rehype-katex";
+import "katex/dist/katex.min.css";
+
 import { Button } from "@/app/components/ui/button";
 import { Badge } from "@/app/components/ui/badge";
 import { useAuth } from "@/app/context/AuthContext";
@@ -38,9 +43,107 @@ interface AIActivityLog {
   assignmentName: string;
   score: string;
   feedback: string;
+  gradedAt: string;
 }
 
-export function WorkspacePage() {
+interface DocumentLine {
+  line_index: number;
+  content: string;
+  score: number;
+  feedback: string;
+}
+
+interface ParsedFeedback {
+  document_lines?: DocumentLine[];
+  generalComment?: string;
+  status?: string;
+}
+
+function BeautifulFeedback({ feedback }: { feedback: string }) {
+  const cleanFeedback = feedback?.trim();
+
+  if (!cleanFeedback || cleanFeedback === "{}") {
+    return (
+      <p className="text-slate-400 bg-slate-50 p-2.5 rounded-xl border border-slate-100/50 italic text-[11px] text-center">
+        Chưa có nhận xét chi tiết tự động từ hệ thống.
+      </p>
+    );
+  }
+
+  try {
+    const parsed: ParsedFeedback = JSON.parse(cleanFeedback);
+    const hasLines = parsed.document_lines && parsed.document_lines.length > 0;
+
+    return (
+      <div className="space-y-2 max-w-full">
+        {parsed.generalComment && (
+          <div className="bg-indigo-50/50 border border-indigo-100/60 rounded-xl p-2 px-2.5 text-[11px] font-medium text-indigo-700 flex items-center justify-between">
+            <span>{parsed.generalComment}</span>
+            <span className="text-[9px] bg-indigo-100 px-1.5 py-0.5 rounded text-indigo-800 uppercase font-bold tracking-wider">
+              {parsed.status || "Graded"}
+            </span>
+          </div>
+        )}
+
+        {hasLines && (
+          <div className="space-y-2 max-h-[200px] overflow-y-auto pr-1 border border-slate-100/60 rounded-xl p-1.5 bg-slate-50/30">
+            {parsed.document_lines?.map((line, index) => (
+              <div
+                key={line.line_index ?? index}
+                className="bg-white border border-slate-100 rounded-lg p-2 shadow-2xs space-y-1 text-[11px]"
+              >
+                <div className="flex items-center justify-between text-[10px] text-slate-400 font-semibold border-b border-slate-50 pb-1 mb-1">
+                  <span>Dòng #{line.line_index + 1}</span>
+                  <span
+                    className={`px-1 rounded font-mono font-bold ${line.score > 0 ? "text-emerald-600 bg-emerald-50" : "text-slate-400 bg-slate-100"}`}
+                  >
+                    +{line.score}đ
+                  </span>
+                </div>
+
+                <div
+                  className="text-slate-800 font-medium break-words overflow-x-auto selection:bg-indigo-100
+                  [&_.katex-display]:my-1 [&_.katex-display]:overflow-x-auto [&_.katex-display]:overflow-y-hidden
+                  [&_.katex]:text-[12px] [&_.katex]:text-indigo-950"
+                >
+                  <ReactMarkdown
+                    remarkPlugins={[remarkMath]}
+                    rehypePlugins={[rehypeKatex]}
+                  >
+                    {line.content}
+                  </ReactMarkdown>
+                </div>
+
+                {line.feedback && (
+                  <p className="text-[10.5px] text-slate-500 bg-slate-50/80 p-1.5 rounded border border-slate-100/50 italic leading-relaxed">
+                    {line.feedback}
+                  </p>
+                )}
+              </div>
+            ))}
+          </div>
+        )}
+      </div>
+    );
+  } catch (e) {
+    return (
+      <div
+        className="text-slate-500 bg-slate-50 p-2.5 rounded-xl border border-slate-100/50 italic text-[11px] leading-relaxed break-words
+        [&_.katex-display]:my-1 [&_.katex-display]:overflow-x-auto [&_.katex-display]:overflow-y-hidden
+        [&_.katex]:text-[12px] [&_.katex]:text-indigo-950"
+      >
+        <ReactMarkdown
+          remarkPlugins={[remarkMath]}
+          rehypePlugins={[rehypeKatex]}
+        >
+          {feedback}
+        </ReactMarkdown>
+      </div>
+    );
+  }
+}
+
+export function TeacherWorkspacePage() {
   const navigate = useNavigate();
   const { user, profile } = useAuth();
 
@@ -50,8 +153,13 @@ export function WorkspacePage() {
     assignmentsCount: 0,
     gradedCount: 0,
   });
-  const [recentClassrooms, setRecentClassrooms] = useState<ClassroomActivity[]>([]);
-  const [recentAIActivities, setRecentAIActivities] = useState<AIActivityLog[]>([]);
+  const [recentClassrooms, setRecentClassrooms] = useState<ClassroomActivity[]>(
+    [],
+  );
+  const [recentAIActivities, setRecentAIActivities] = useState<AIActivityLog[]>(
+    [],
+  );
+  const [loadingActivities, setLoadingActivities] = useState(true);
 
   useEffect(() => {
     if (!user?.id) return;
@@ -90,14 +198,16 @@ export function WorkspacePage() {
           // Fix table: Get recent classes joined with exact class_student and exam counter definitions
           supabaseClient
             .from("class")
-            .select(`
+            .select(
+              `
               class_id,
               class_name,
               description,
               created_at,
               class_student(count),
               exam(count)
-            `)
+            `,
+            )
             .eq("teacher_profile_id", user.id)
             .order("created_at", { ascending: false })
             .limit(4),
@@ -105,14 +215,19 @@ export function WorkspacePage() {
           // Fix table: Extract recent evaluations from exam_result joined with student metadata
           supabaseClient
             .from("exam_result")
-            .select(`
-              exam_result_id,
+            .select(
+              `
               score,
               feedback,
               graded_at,
-              student:student_id(full_name),
-              exam:exam_id(exam_name, created_by)
-            `)
+              student:student_id (full_name),
+              exam!inner (
+                exam_name,
+                created_by
+              )
+            `,
+            )
+            .eq("exam.created_by", user.id)
             .eq("exam.created_by", user.id)
             .not("score", "is", null)
             .order("graded_at", { ascending: false })
@@ -140,15 +255,19 @@ export function WorkspacePage() {
 
         // 4. Mapping Activity Feed Log rows
         if (activitiesDataRes.data) {
-          const mappedActivities = activitiesDataRes.data.map((res: any) => ({
-            studentName: res.student?.full_name || "Học sinh ẩn danh",
-            assignmentName: res.exam?.exam_name || "Bài tập không tên",
-            score:
-              res.score !== undefined && res.score !== null
-                ? `${res.score}/10`
-                : "Chưa chấm",
-            feedback: res.feedback || "Không có nhận xét tự động từ hệ thống.",
-          }));
+          const mappedActivities = activitiesDataRes.data
+            .filter((res: any) => res.exam?.created_by === user.id) // extra client-side safety
+            .map((res: any) => ({
+              studentName: res.student?.full_name || "Học sinh ẩn danh",
+              assignmentName: res.exam?.exam_name || "Bài tập không tên",
+              score:
+                res.score !== undefined && res.score !== null
+                  ? `${res.score}/10`
+                  : "Chưa chấm",
+              feedback:
+                res.feedback || "Không có nhận xét tự động từ hệ thống.",
+              gradedAt: res.graded_at,
+            }));
           setRecentAIActivities(mappedActivities);
         }
       } catch (error) {
@@ -202,7 +321,8 @@ export function WorkspacePage() {
             Xin chào, {profile?.name || "Giáo viên"}! 👋
           </h1>
           <p className="text-sm text-slate-500 mt-1">
-            Hệ thống trợ lý chấm điểm Scorify AI đã sẵn sàng đồng hành cùng các đợt đánh giá của bạn.
+            Hệ thống trợ lý chấm điểm Scorify AI đã sẵn sàng đồng hành cùng các
+            đợt đánh giá của bạn.
           </p>
         </div>
 
@@ -272,7 +392,8 @@ export function WorkspacePage() {
 
           {recentClassrooms.length === 0 ? (
             <div className="bg-white border border-dashed border-slate-200 rounded-xl p-8 text-center text-sm text-slate-400">
-              Bạn chưa có lớp học nào. Hãy bấm nút Tạo đợt chấm bài mới để bắt đầu.
+              Bạn chưa có lớp học nào. Hãy bấm nút Tạo đợt chấm bài mới để bắt
+              đầu.
             </div>
           ) : (
             <div className="grid sm:grid-cols-2 gap-4">
@@ -332,14 +453,14 @@ export function WorkspacePage() {
                 Chưa có hoạt động chấm điểm bằng AI nào được ghi nhận.
               </div>
             ) : (
-              <div className="space-y-4 max-h-[360px] overflow-y-auto pr-1">
+              <div className="space-y-4 max-h-[480px] overflow-y-auto pr-1">
                 {recentAIActivities.map((activity, idx) => (
                   <div
                     key={idx}
                     className="text-xs border-b border-slate-50 pb-3.5 last:border-0 last:pb-0"
                   >
                     <div className="flex items-center justify-between gap-2 mb-1">
-                      <span className="font-bold text-slate-800 truncate flex items-center gap-1+">
+                      <span className="font-bold text-slate-800 truncate flex items-center gap-1">
                         <Cpu className="size-3 text-indigo-500 shrink-0" />
                         {activity.studentName}
                       </span>
@@ -350,9 +471,9 @@ export function WorkspacePage() {
                     <p className="text-[10px] text-indigo-500 font-medium mb-1.5">
                       Đợt: {activity.assignmentName}
                     </p>
-                    <p className="text-slate-500 bg-slate-50 p-2 rounded-lg leading-relaxed italic border border-slate-100/50 text-[11px]">
-                      "{activity.feedback}"
-                    </p>
+                    <div className="mt-1">
+                      <BeautifulFeedback feedback={activity.feedback} />
+                    </div>
                   </div>
                 ))}
               </div>

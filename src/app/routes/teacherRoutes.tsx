@@ -13,6 +13,7 @@ import { CreateAssignmentPage } from "../pages/Teacher/create-assignment-page";
 import { ClassroomDetailScreen } from "../pages/Teacher/classroom-detail-page";
 import { AIGradingPage } from "../pages/Teacher/ai-grading-page";
 import { SubscriptionPage } from "../pages/subscription-page";
+import { ProfileEditPage } from "../pages/Teacher/profile-edit-page";
 
 export function TeacherRoutes() {
   return (
@@ -20,6 +21,7 @@ export function TeacherRoutes() {
       <Route path="/" element={<TeacherLayout />}>
         <Route index element={<Navigate to="/workspace" replace />} />
         <Route path="workspace" element={<WorkspacePage />} />
+        <Route path="profile/edit" element={<ProfileEditPage />} />
 
         <Route path="rubrics" element={<RubricListPage />} />
         <Route path="rubrics/create" element={<CreateRubricPage />} />

@@ -318,7 +318,7 @@ useEffect(() => {
                         className={`size-4.5 shrink-0 mt-0.5 ${isCurrent ? "text-emerald-500" : "text-green-500"}`}
                       />
                       <span>
-                        Lượt chấm thi AI:{" "}
+                        Lượt chấm thi AI:
                         <strong>
                           {plan.submission_limit || "Không giới hạn"} bài
                         </strong>{" "}

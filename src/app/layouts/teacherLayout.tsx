@@ -17,9 +17,6 @@ export function TeacherLayout() {
   const location = useLocation();
   const navigate = useNavigate();
 
-  const authPayload = useAuth();
-
-  console.log("Live Dynamic Context Pipeline:", authPayload);
   const { profile, subscription, loading, logout } = useAuth();
 
   const navItems = [
@@ -38,13 +35,13 @@ export function TeacherLayout() {
     }
   };
 
-  if (loading) {
-    return (
-      <div className="h-screen w-screen bg-[#111A2E] flex items-center justify-center">
-        <div className="animate-spin rounded-full h-8 w-8 border-t-2 border-indigo-500"></div>
-      </div>
-    );
-  }
+  // if (loading) {
+  //   return (
+  //     <div className="h-screen w-screen bg-[#111A2E] flex items-center justify-center">
+  //       <div className="animate-spin rounded-full h-8 w-8 border-t-2 border-indigo-500"></div>
+  //     </div>
+  //   );
+  // }
 
   return (
     <div className="flex h-screen w-screen bg-[#111A2E] overflow-hidden font-sans antialiased selection:bg-indigo-500/30">
@@ -121,7 +118,6 @@ export function TeacherLayout() {
             </div>
           </Link>
 
-          {/* Explicit log-out utility trigger button */}
           <button
             onClick={handleLogout}
             className="w-full h-12 flex items-center justify-center text-slate-500 hover:text-rose-400 transition-colors rounded-xl"
@@ -137,7 +133,6 @@ export function TeacherLayout() {
           <div className="flex items-center gap-3">
             <span className="text-xs font-bold px-3 py-1 rounded-full bg-slate-100 text-slate-600 flex items-center gap-1.5">
               <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse"></span>
-              {/* 🎯 Dynamic subscription tier fallback rendering naming */}
               Scorify AI — Gói {subscription?.plan_name || "Cơ Bản (Free)"}
             </span>
           </div>
@@ -153,7 +148,6 @@ export function TeacherLayout() {
               className="flex items-center gap-3 border-l border-slate-100 pl-4 group"
             >
               <div className="text-right hidden sm:block">
-                {/* 🎯 Pull profile name values from global data stream */}
                 <p className="text-sm font-bold text-slate-800 leading-tight group-hover:text-indigo-600 transition-colors">
                   {profile?.name || "Người dùng Scorify"}
                 </p>
@@ -161,16 +155,18 @@ export function TeacherLayout() {
                   Hồ sơ của tôi
                 </p>
               </div>
-              
+
               {profile?.profile_picture ? (
-                <img 
-                  src={profile.profile_picture} 
-                  alt="Avatar" 
+                <img
+                  src={profile.profile_picture}
+                  alt="Avatar"
                   className="w-9 h-9 rounded-lg object-cover border border-slate-100 shadow-sm"
                 />
               ) : (
                 <div className="w-9 h-9 rounded-lg bg-gradient-to-tr from-[#111A2E] to-[#22314E] text-white flex items-center justify-center font-bold text-sm shadow-inner group-hover:scale-105 transition-transform">
-                  {profile?.name ? profile.name.substring(0, 2).toUpperCase() : "SC"}
+                  {profile?.name
+                    ? profile.name.substring(0, 2).toUpperCase()
+                    : "SC"}
                 </div>
               )}
             </Link>

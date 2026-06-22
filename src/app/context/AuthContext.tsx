@@ -13,7 +13,6 @@ import {
   SubscriptionPlan,
 } from "../services/subscriptionService";
 
-// Type mappings matching your PostgreSQL definitions
 export interface UserProfile {
   id: string;
   name: string | null;
@@ -27,6 +26,7 @@ export interface AuthContextType {
   subscription: SubscriptionPlan | null; // Joined active subscription_plan details
   loading: boolean;
   refreshSession: () => Promise<void>;
+  refreshProfile: () => Promise<void>;
   logout: () => Promise<void>;
 }
 
@@ -141,8 +141,33 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     }
   }
 
+  async function refreshProfileData() {
+    if (!user?.id) return;
+    try {
+      const { data, error } = await supabaseClient
+        .from("profiles")
+        .select("*")
+        .eq("id", user.id)
+        .maybeSingle();
+      if (!error && data) {
+        setProfile(data as UserProfile);
+      }
+    } catch (e) {
+      console.error(
+        "Failed explicitly updating context profile reference node:",
+        e,
+      );
+    }
+  }
+
   useEffect(() => {
-    // Listen to real-time auth changes (Sign In, Sign Out, Token Refreshing)
+    let lastUserId: string | null = null;
+    let isInitialMount = true;
+
+    supabaseClient.auth.getSession().then(({ data: { session } }) => {
+      if (session?.user) lastUserId = session.user.id;
+    });
+
     const {
       data: { subscription: authListener },
     } = supabaseClient.auth.onAuthStateChange(async (event, session) => {
@@ -153,22 +178,37 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         session?.user?.id,
       );
 
-      if (
-        event === "SIGNED_IN" ||
-        event === "TOKEN_REFRESHED" ||
-        session?.user
-      ) {
-        await fetchSessionData();
-      } else if (event === "SIGNED_OUT") {
+      const currentUserId = session?.user?.id || null;
+
+      if (event === "SIGNED_OUT") {
+        lastUserId = null;
         setUser(null);
         setProfile(null);
         setSubscription(null);
         setLoading(false);
+        return;
+      }
+
+      if (currentUserId !== lastUserId || isInitialMount) {
+        isInitialMount = false;
+        lastUserId = currentUserId;
+
+        if (currentUserId) {
+          await fetchSessionData();
+        } else {
+          setLoading(false);
+        }
+      } else {
+        if (session?.user) {
+          setUser(session.user);
+        }
+        setLoading(false);
       }
     });
 
-    // Initial pull down logic
-    fetchSessionData();
+    fetchSessionData().then(() => {
+      isInitialMount = false;
+    });
 
     return () => {
       authListener.unsubscribe();
@@ -187,6 +227,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         subscription,
         loading,
         refreshSession: fetchSessionData,
+        refreshProfile: refreshProfileData,
         logout,
       }}
     >

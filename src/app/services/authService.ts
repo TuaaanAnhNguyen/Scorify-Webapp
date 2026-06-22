@@ -34,7 +34,6 @@ export const authService = {
       throw new Error("No data returned from login function");
     }
 
-    // Extract tokens — they are inside .session
     const accessToken = data.session?.access_token;
     const refreshToken = data.session?.refresh_token;
     const userData = data.user || data.session?.user;
@@ -44,25 +43,25 @@ export const authService = {
       throw new Error("Invalid session data received from server");
     }
 
+    localStorage.setItem("scorify_access_token", accessToken);
+    localStorage.setItem("scorify_refresh_token", refreshToken);
+    localStorage.setItem("scorify_user", JSON.stringify(userData || data));
+
     try {
-      // Set Supabase session (critical for auth listeners)
-      await supabaseClient.auth.setSession({
+      const { error: setSessionError } = await supabaseClient.auth.setSession({
         access_token: accessToken,
         refresh_token: refreshToken,
       });
 
-      // Backup to localStorage (your fallback mechanism)
-      localStorage.setItem("scorify_access_token", accessToken);
-      localStorage.setItem("scorify_refresh_token", refreshToken);
-      localStorage.setItem("scorify_user", JSON.stringify(userData || data));
+      if (setSessionError) {
+        console.warn("Supabase setSession returned an error, attempting fallback recovery...", setSessionError);
+        // Đọc lại bộ nhớ để đảm bảo Client Instance đã nhận token thành công
+        await supabaseClient.auth.getSession();
+      }
 
-      console.log("Login successful - Session & localStorage updated");
+      console.log("Login successful - Session & localStorage strictly synchronized");
     } catch (setSessionError) {
-      console.error("Failed to set Supabase session:", setSessionError);
-      // Still save to localStorage as fallback
-      localStorage.setItem("scorify_access_token", accessToken);
-      localStorage.setItem("scorify_refresh_token", refreshToken);
-      localStorage.setItem("scorify_user", JSON.stringify(userData || data));
+      console.error("Critical failure during setting Supabase session:", setSessionError);
     }
 
     return data;
