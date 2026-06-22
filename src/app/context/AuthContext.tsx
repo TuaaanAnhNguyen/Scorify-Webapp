@@ -161,6 +161,13 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   }
 
   useEffect(() => {
+    let lastUserId: string | null = null;
+    let isInitialMount = true;
+
+    supabaseClient.auth.getSession().then(({ data: { session } }) => {
+      if (session?.user) lastUserId = session.user.id;
+    });
+
     const {
       data: { subscription: authListener },
     } = supabaseClient.auth.onAuthStateChange(async (event, session) => {
@@ -171,21 +178,37 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         session?.user?.id,
       );
 
-      if (
-        event === "SIGNED_IN" ||
-        event === "TOKEN_REFRESHED" ||
-        session?.user
-      ) {
-        await fetchSessionData();
-      } else if (event === "SIGNED_OUT") {
+      const currentUserId = session?.user?.id || null;
+
+      if (event === "SIGNED_OUT") {
+        lastUserId = null;
         setUser(null);
         setProfile(null);
         setSubscription(null);
         setLoading(false);
+        return;
+      }
+
+      if (currentUserId !== lastUserId || isInitialMount) {
+        isInitialMount = false;
+        lastUserId = currentUserId;
+
+        if (currentUserId) {
+          await fetchSessionData();
+        } else {
+          setLoading(false);
+        }
+      } else {
+        if (session?.user) {
+          setUser(session.user);
+        }
+        setLoading(false);
       }
     });
 
-    fetchSessionData();
+    fetchSessionData().then(() => {
+      isInitialMount = false;
+    });
 
     return () => {
       authListener.unsubscribe();

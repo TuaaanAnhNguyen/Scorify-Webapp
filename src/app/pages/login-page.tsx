@@ -5,6 +5,7 @@ import { Link, useNavigate } from "react-router-dom";
 import { GraduationCap, Mail, Lock, Eye, EyeOff, Loader2 } from "lucide-react";
 import { authService } from "@/app/services/authService";
 import { toast } from "sonner";
+import { useAuth } from '../context/AuthContext';
 
 interface LoginErrors {
   emailOrPhone?: string;
@@ -14,6 +15,7 @@ interface LoginErrors {
 
 export function LoginPage() {
   const navigate = useNavigate();
+  const { refreshSession } = useAuth();
   const [showPassword, setShowPassword] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
   const [fieldErrors, setFieldErrors] = useState<LoginErrors>({});
@@ -34,7 +36,6 @@ export function LoginPage() {
       setFieldErrors({ ...fieldErrors, global: undefined });
     }
   };
-  
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -60,13 +61,18 @@ export function LoginPage() {
         password: formData.password,
       });
 
+      await refreshSession();
+
       toast.success("Đăng nhập thành công! Chuyển hướng...");
-      navigate("/workspace");
+
+      setTimeout(() => {
+        navigate("/workspace", { replace: true });
+      }, 50);
     } catch (err: any) {
+      setIsLoading(false);
       console.error("Raw login block error:", err);
 
       let serverErrorMessage = "";
-
       if (err.context && typeof err.context.json === "function") {
         try {
           const responseBody = await err.context.json();
@@ -100,8 +106,6 @@ export function LoginPage() {
       } else {
         setFieldErrors({ global: serverErrorMessage });
       }
-    } finally {
-      setIsLoading(false);
     }
   };
 

@@ -92,7 +92,8 @@ export const subscriptionService = {
   async getBillingHistory(profileId: string): Promise<BillingHistoryRecord[]> {
     const { data, error } = await supabaseClient
       .from("user_subscription")
-      .select(`
+      .select(
+        `
         user_subscription_id,
         start_date,
         end_date,
@@ -102,15 +103,48 @@ export const subscriptionService = {
           price,
           billing_period
         )
-      `)
+      `,
+      )
       .eq("profile_id", profileId)
       .order("start_date", { ascending: false });
 
     if (error) {
-      console.error("Error query from user_subscription ledger table:", error.message);
+      console.error(
+        "Error query from user_subscription ledger table:",
+        error.message,
+      );
       throw error;
     }
 
     return (data as unknown as BillingHistoryRecord[]) || [];
-  }
+  },
+
+  async getUserModelOption(profileId: string): Promise<string> {
+    const { data, error } = await supabaseClient
+      .from("user_subscription")
+      .select(
+        `
+        status,
+        subscription_plan:plan_id (
+          model_option
+        )
+      `,
+      )
+      .eq("profile_id", profileId)
+      .eq("status", "active")
+      .maybeSingle();
+
+    if (error) {
+      console.error(
+        "Error querying model_option from database:",
+        error.message,
+      );
+      return "Scorify Medium";
+    }
+
+    const rawResult = data as any;
+    const modelOption = rawResult?.subscription_plan?.model_option;
+    console.log(`\n This user uses the model: ${modelOption} \n`);
+    return modelOption || "Scorify Medium";
+  },
 };

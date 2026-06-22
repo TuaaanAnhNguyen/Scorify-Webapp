@@ -17,9 +17,6 @@ export function TeacherLayout() {
   const location = useLocation();
   const navigate = useNavigate();
 
-  const authPayload = useAuth();
-
-  console.log("Live Dynamic Context Pipeline:", authPayload);
   const { profile, subscription, loading, logout } = useAuth();
 
   const navItems = [
@@ -38,13 +35,13 @@ export function TeacherLayout() {
     }
   };
 
-  if (loading) {
-    return (
-      <div className="h-screen w-screen bg-[#111A2E] flex items-center justify-center">
-        <div className="animate-spin rounded-full h-8 w-8 border-t-2 border-indigo-500"></div>
-      </div>
-    );
-  }
+  // if (loading) {
+  //   return (
+  //     <div className="h-screen w-screen bg-[#111A2E] flex items-center justify-center">
+  //       <div className="animate-spin rounded-full h-8 w-8 border-t-2 border-indigo-500"></div>
+  //     </div>
+  //   );
+  // }
 
   return (
     <div className="flex h-screen w-screen bg-[#111A2E] overflow-hidden font-sans antialiased selection:bg-indigo-500/30">
@@ -158,16 +155,18 @@ export function TeacherLayout() {
                   Hồ sơ của tôi
                 </p>
               </div>
-              
+
               {profile?.profile_picture ? (
-                <img 
-                  src={profile.profile_picture} 
-                  alt="Avatar" 
+                <img
+                  src={profile.profile_picture}
+                  alt="Avatar"
                   className="w-9 h-9 rounded-lg object-cover border border-slate-100 shadow-sm"
                 />
               ) : (
                 <div className="w-9 h-9 rounded-lg bg-gradient-to-tr from-[#111A2E] to-[#22314E] text-white flex items-center justify-center font-bold text-sm shadow-inner group-hover:scale-105 transition-transform">
-                  {profile?.name ? profile.name.substring(0, 2).toUpperCase() : "SC"}
+                  {profile?.name
+                    ? profile.name.substring(0, 2).toUpperCase()
+                    : "SC"}
                 </div>
               )}
             </Link>
