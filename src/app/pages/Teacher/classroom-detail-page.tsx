@@ -16,7 +16,10 @@ import {
   Loader2,
   Calendar,
   UserPlus,
-  FileText
+  FileText,
+  Wand2,
+  CheckCircle2,
+  AlertTriangle
 } from "lucide-react";
 import { Button } from "@/app/components/ui/button";
 import { Input } from "@/app/components/ui/input";
@@ -40,6 +43,7 @@ import {
 import { toast } from "sonner";
 import { supabaseClient } from "@/app/services/supabaseClient";
 import { useAuth } from "@/app/context/AuthContext";
+import { documentEndpoints, gradingEndpoints, queueEndpoints } from "@/app/api/endpoints";
 
 export function ClassroomDetailScreen() {
   const { classId } = useParams<{ classId: string }>();
@@ -60,6 +64,13 @@ export function ClassroomDetailScreen() {
   const [newStudentName, setNewStudentName] = useState("");
   const [newStudentEmail, setNewStudentEmail] = useState("");
   const [isAdding, setIsAdding] = useState(false);
+
+  // Bulk Grading State
+  const [isBulkGradingOpen, setIsBulkGradingOpen] = useState(false);
+  const [selectedAssignment, setSelectedAssignment] = useState<any>(null);
+  const [bulkGradingStatus, setBulkGradingStatus] = useState<"idle" | "grading" | "success" | "error">("idle");
+  const [bulkGradingProgress, setBulkGradingProgress] = useState({ total: 0, current: 0 });
+  const [bulkGradingMessage, setBulkGradingMessage] = useState("");
 
   const fetchClassroomData = async () => {
     if (!classId || !user) return;
@@ -124,6 +135,186 @@ export function ClassroomDetailScreen() {
   useEffect(() => {
     fetchClassroomData();
   }, [classId, user]);
+
+  const getRubricPathFromUrl = (url: string | null) => {
+    if (!url) return null;
+    if (url.includes('Scorify_rubrics/')) {
+      return decodeURIComponent(url.split('Scorify_rubrics/')[1]);
+    }
+    return url;
+  };
+
+  const getSubmissionPathFromSignedUrl = (signedUrl: string) => {
+    try {
+      const { pathname } = new URL(signedUrl);
+      const marker = '/object/sign/Scorify_storagedev/';
+      const markerIndex = pathname.indexOf(marker);
+
+      if (markerIndex === -1) return null;
+
+      return decodeURIComponent(pathname.slice(markerIndex + marker.length));
+    } catch {
+      return null;
+    }
+  };
+
+  const handleOpenBulkGrading = (e: React.MouseEvent, assignment: any) => {
+    e.preventDefault();
+    e.stopPropagation();
+    setSelectedAssignment(assignment);
+    setIsBulkGradingOpen(true);
+    setBulkGradingStatus("idle");
+    setBulkGradingMessage("");
+    setBulkGradingProgress({ total: 0, current: 0 });
+  };
+
+  const pollTask = async (taskFn: () => Promise<any>) => {
+    while (true) {
+      try {
+        return await taskFn();
+      } catch (err: any) {
+        if (err.response?.status === 401) {
+          throw new Error("Định dạng file không hợp lệ.");
+        }
+        await new Promise(resolve => setTimeout(resolve, 5000));
+      }
+    }
+  };
+
+  const handleStartBulkGrading = async () => {
+    if (!selectedAssignment) return;
+    setBulkGradingStatus("grading");
+    setBulkGradingMessage("Đang lấy danh sách bài làm cần chấm...");
+
+    try {
+      const { data: resultsData, error: resultsError } = await supabaseClient
+        .from('exam_result')
+        .select('*')
+        .eq('exam_id', selectedAssignment.exam_id)
+        .not('signed_url', 'is', null);
+
+      if (resultsError) throw resultsError;
+
+      const pendingSubmissions = resultsData?.filter(r => {
+        try {
+          const feedbackObj = typeof r.feedback === 'string' ? JSON.parse(r.feedback) : r.feedback;
+          return feedbackObj?.status !== "graded";
+        } catch {
+          return true;
+        }
+      }) || [];
+
+      if (pendingSubmissions.length === 0) {
+        setBulkGradingStatus("success");
+        setBulkGradingMessage("Không có bài làm nào cần chấm!");
+        return;
+      }
+
+      setBulkGradingProgress({ total: pendingSubmissions.length, current: 0 });
+      setBulkGradingMessage("Đang chuẩn bị Rubric và Đề thi...");
+
+      let rubricPath: string | null = null;
+      let examPath: string | null = null;
+      try {
+        const meta = JSON.parse(selectedAssignment.description);
+        rubricPath = getRubricPathFromUrl(meta.rubricUrl || null);
+        examPath = getRubricPathFromUrl(meta.examUrl || null);
+      } catch {}
+
+      if (!rubricPath || !examPath) {
+        throw new Error("Không tìm thấy Rubric hoặc Đề bài");
+      }
+
+      const { data: rubricSignedData } = await supabaseClient.storage.from('Scorify_rubrics').createSignedUrl(rubricPath, 3600);
+      const { data: examSignedData } = await supabaseClient.storage.from('Scorify_rubrics').createSignedUrl(examPath, 3600);
+      
+      if (!rubricSignedData?.signedUrl || !examSignedData?.signedUrl) {
+        throw new Error("Lỗi lấy signed url cho rubric/đề");
+      }
+
+      const rubricRes = await fetch(rubricSignedData.signedUrl);
+      const rubricBlob = await rubricRes.blob();
+      const rubricFile = new File([rubricBlob], 'rubric.pdf', { type: rubricBlob.type });
+
+      const examRes = await fetch(examSignedData.signedUrl);
+      const examBlob = await examRes.blob();
+      const examFile = new File([examBlob], 'exam.pdf', { type: examBlob.type });
+
+      setBulkGradingMessage("Bắt đầu chấm AI...");
+      let completedCount = 0;
+      
+      const processSubmission = async (submission: any) => {
+        try {
+          let signedUrl = submission.signed_url;
+          const filePath = getSubmissionPathFromSignedUrl(signedUrl);
+          if (filePath) {
+            const { data } = await supabaseClient.storage.from('Scorify_storagedev').createSignedUrl(filePath, 3600);
+            if (data?.signedUrl) signedUrl = data.signedUrl;
+          }
+
+          const response = await fetch(signedUrl);
+          const blob = await response.blob();
+          const fileExt = blob.type.split('/')[1] || 'jpg';
+          const imageFile = new File([blob], `sub_${submission.student_id}.${fileExt}`, { type: blob.type });
+
+          const detectQueueRes = await queueEndpoints.registerQueue();
+          const detectTaskId = detectQueueRes.data.task_id;
+          const detectResponse = await pollTask(() => documentEndpoints.detectLayout(detectTaskId, imageFile));
+          const documentJsonStr = JSON.stringify(detectResponse);
+
+          const gradingQueueRes = await queueEndpoints.registerQueue();
+          const gradingTaskId = gradingQueueRes.data.task_id;
+          const gradingResponse = await pollTask(() => gradingEndpoints.gradeByRubric(gradingTaskId, examFile, rubricFile, documentJsonStr));
+
+          const newLines = gradingResponse.document_lines || [];
+          const totalScore = newLines.reduce((sum: number, line: any) => sum + (line.score || 0), 0);
+          
+          const currentFeedbackObj = typeof submission.feedback === 'string' ? JSON.parse(submission.feedback || '{}') : (submission.feedback || {});
+          const combinedFeedback = {
+            ...currentFeedbackObj,
+            document_lines: newLines,
+            generalComment: "Đã chấm điểm hoàn tất bằng AI.",
+            status: "graded"
+          };
+
+          await supabaseClient.from('exam_result').update({
+            score: totalScore,
+            feedback: JSON.stringify(combinedFeedback),
+            graded_at: new Date().toISOString(),
+            signed_url: signedUrl
+          }).eq('exam_result_id', submission.exam_result_id);
+
+        } catch (e) {
+          console.error("Lỗi chấm submission", submission.exam_result_id, e);
+        } finally {
+          completedCount++;
+          setBulkGradingProgress(prev => ({ ...prev, current: completedCount }));
+        }
+      };
+
+      const concurrency = 5;
+      const executing = new Set<Promise<any>>();
+      for (const sub of pendingSubmissions) {
+        if (!isBulkGradingOpen) break; // simplistic way to stop if closed
+        const p = Promise.resolve().then(() => processSubmission(sub));
+        executing.add(p);
+        const clean = () => executing.delete(p);
+        p.then(clean).catch(clean);
+        if (executing.size >= concurrency) {
+          await Promise.race(executing);
+        }
+      }
+      await Promise.all(executing);
+
+      setBulkGradingStatus("success");
+      setBulkGradingMessage("Đã chấm xong hàng loạt!");
+
+    } catch (err: any) {
+      console.error(err);
+      setBulkGradingStatus("error");
+      setBulkGradingMessage("Lỗi: " + err.message);
+    }
+  };
 
   const handleAddStudentManual = async () => {
     if (!newStudentName.trim()) {
@@ -470,12 +661,20 @@ export function ClassroomDetailScreen() {
               </div>
 
               <div className="border-t border-slate-50 pt-3 mt-4 flex items-center justify-between text-[10px]">
-                <span className="text-slate-400 font-medium">
-                  {assignment.exam_date ? `Ngày thi: ${new Date(assignment.exam_date).toLocaleDateString('vi-VN')}` : "Chưa đặt ngày thi"}
-                </span>
-                <span className="bg-indigo-50 text-indigo-700 font-bold px-2 py-0.5 rounded-md flex items-center gap-1">
-                  Chi tiết <ArrowRight className="size-2.5 ml-0.5 group-hover:translate-x-0.5 transition-transform" />
-                </span>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={(e) => handleOpenBulkGrading(e, assignment)}
+                  className="h-7 text-[10px] font-bold text-indigo-600 border-indigo-200 bg-indigo-50 hover:bg-indigo-100 rounded-md px-2 flex items-center gap-1.5"
+                >
+                  <Wand2 className="size-3" />
+                  Chấm hàng loạt
+                </Button>
+                <div className="flex items-center gap-2 text-slate-400 font-medium">
+                  <span className="bg-slate-100 text-slate-600 font-bold px-2 py-0.5 rounded-md flex items-center gap-1">
+                    Chi tiết <ArrowRight className="size-2.5 ml-0.5 group-hover:translate-x-0.5 transition-transform" />
+                  </span>
+                </div>
               </div>
             </div>
           ))}
@@ -568,6 +767,66 @@ export function ClassroomDetailScreen() {
             {addMode === "manual" && (
               <Button onClick={handleAddStudentManual} disabled={isAdding} className="bg-indigo-600 text-white font-bold text-xs h-9">
                 {isAdding ? <Loader2 className="size-4 animate-spin mr-1" /> : "Xác nhận thêm"}
+              </Button>
+            )}
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* DIALOG BULK GRADING */}
+      <Dialog open={isBulkGradingOpen} onOpenChange={setIsBulkGradingOpen}>
+        <DialogContent className="rounded-2xl max-w-md p-6 bg-white">
+          <DialogHeader>
+            <DialogTitle className="text-base font-bold text-slate-900 flex items-center gap-2">
+              <Wand2 className="size-5 text-indigo-600" />
+              Chấm bài hàng loạt
+            </DialogTitle>
+          </DialogHeader>
+          <div className="py-4 space-y-4 text-center">
+            <h3 className="text-sm font-bold text-slate-800">{selectedAssignment?.exam_name}</h3>
+            
+            {bulkGradingStatus === "idle" && (
+              <p className="text-xs text-slate-500">
+                Hệ thống sẽ tự động quét và chấm các bài làm chưa được chấm (trạng thái chờ). Quá trình có thể mất vài phút.
+              </p>
+            )}
+            
+            {bulkGradingStatus === "grading" && (
+              <div className="space-y-4">
+                <Loader2 className="size-8 text-indigo-600 animate-spin mx-auto" />
+                <p className="text-xs font-bold text-indigo-600">{bulkGradingMessage}</p>
+                {bulkGradingProgress.total > 0 && (
+                  <div>
+                    <div className="w-full bg-slate-100 rounded-full h-2.5 mb-1 overflow-hidden">
+                      <div className="bg-indigo-600 h-2.5 rounded-full transition-all duration-300" style={{ width: `${(bulkGradingProgress.current / bulkGradingProgress.total) * 100}%` }}></div>
+                    </div>
+                    <p className="text-[10px] text-slate-400">{bulkGradingProgress.current} / {bulkGradingProgress.total} bài</p>
+                  </div>
+                )}
+              </div>
+            )}
+
+            {bulkGradingStatus === "success" && (
+              <div className="space-y-2">
+                <CheckCircle2 className="size-10 text-emerald-500 mx-auto" />
+                <p className="text-sm font-bold text-emerald-600">{bulkGradingMessage}</p>
+              </div>
+            )}
+
+            {bulkGradingStatus === "error" && (
+              <div className="space-y-2">
+                <AlertTriangle className="size-10 text-red-500 mx-auto" />
+                <p className="text-xs text-red-600">{bulkGradingMessage}</p>
+              </div>
+            )}
+          </div>
+          <DialogFooter className="mt-2 border-t border-slate-50 pt-4">
+            <Button variant="ghost" onClick={() => setIsBulkGradingOpen(false)} className="text-xs font-bold h-9" disabled={bulkGradingStatus === "grading"}>
+              Đóng
+            </Button>
+            {bulkGradingStatus === "idle" && (
+              <Button onClick={handleStartBulkGrading} className="bg-indigo-600 hover:bg-indigo-700 text-white font-bold text-xs h-9">
+                Bắt đầu chấm
               </Button>
             )}
           </DialogFooter>
