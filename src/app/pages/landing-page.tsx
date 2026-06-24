@@ -17,10 +17,7 @@ export function LandingPage() {
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
           <div className="flex justify-between items-center h-16">
             <div className="flex items-center gap-2">
-              <GraduationCap className="size-8 text-[#F05123]" />
-              <span className="font-bold text-xl tracking-wide text-white">
-                Scorify
-              </span>
+              <img src="/scorify-logo.png" alt="Scorify Logo" className="h-7 w-auto" />
             </div>
 
             {/* Top Menu Links with exact weights and colors */}
@@ -333,8 +330,7 @@ export function LandingPage() {
           <div className="grid md:grid-cols-4 gap-8">
             <div>
               <div className="flex items-center gap-2 mb-4">
-                <GraduationCap className="size-6 text-[#F05123]" />
-                <span className="font-bold text-lg text-white">Scorify</span>
+                <img src="/scorify-logo.png" alt="Scorify Logo" className="h-6 w-auto" />
               </div>
               <p className="leading-relaxed font-medium">
                 Giải pháp trợ lý AI chấm điểm bài tự luận qua hình ảnh hiệu quả

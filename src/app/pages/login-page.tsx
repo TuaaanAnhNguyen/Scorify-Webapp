@@ -139,10 +139,7 @@ export function LoginPage() {
             to="/"
             className="inline-flex items-center gap-2 mb-3 justify-center"
           >
-            <GraduationCap className="size-6 text-[#F05123] fill-[#F05123]" />
-            <span className="font-bold text-lg text-gray-900 tracking-wide">
-              Scorify
-            </span>
+            <img src="/scorify-logo-colored.png" alt="Scorify Logo" className="h-7 w-auto" />
           </Link>
           <h1 className="text-2xl font-bold text-gray-900 tracking-tight">
             Mừng bạn trở lại
