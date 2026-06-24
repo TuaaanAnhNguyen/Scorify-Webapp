@@ -71,11 +71,77 @@ export function ClassroomDetailScreen() {
   const [bulkGradingStatus, setBulkGradingStatus] = useState<"idle" | "grading" | "success" | "error">("idle");
   const [bulkGradingProgress, setBulkGradingProgress] = useState({ total: 0, current: 0 });
   const [bulkGradingMessage, setBulkGradingMessage] = useState("");
+  const [bulkSubmissions, setBulkSubmissions] = useState<any[]>([]);
+  const [selectedSubmissionIds, setSelectedSubmissionIds] = useState<string[]>([]);
+  const [loadingSubmissions, setLoadingSubmissions] = useState(false);
+
+  const [elapsedTime, setElapsedTime] = useState(0);
 
   const isBulkGradingOpenRef = useRef(isBulkGradingOpen);
   useEffect(() => {
     isBulkGradingOpenRef.current = isBulkGradingOpen;
   }, [isBulkGradingOpen]);
+
+  useEffect(() => {
+    let timerInterval: any = null;
+    if (bulkGradingStatus === "grading") {
+      setElapsedTime(0);
+      timerInterval = setInterval(() => {
+        setElapsedTime(prev => prev + 1);
+      }, 1000);
+    } else {
+      if (timerInterval) {
+        clearInterval(timerInterval);
+      }
+    }
+    return () => {
+      if (timerInterval) clearInterval(timerInterval);
+    };
+  }, [bulkGradingStatus]);
+
+  const formatTime = (seconds: number) => {
+    const mins = Math.floor(seconds / 60);
+    const secs = seconds % 60;
+    return `${mins.toString().padStart(2, '0')}:${secs.toString().padStart(2, '0')}`;
+  };
+
+  const fetchBulkSubmissions = async (assignmentId: string) => {
+    try {
+      setLoadingSubmissions(true);
+      const { data, error } = await supabaseClient
+        .from('exam_result')
+        .select('*')
+        .eq('exam_id', assignmentId)
+        .not('signed_url', 'is', null);
+
+      if (error) throw error;
+
+      const formatted = (data || []).map(r => {
+        const studentInfo = students.find(s => s.id === r.student_id);
+        let isGraded = false;
+        try {
+          const feedbackObj = typeof r.feedback === 'string' ? JSON.parse(r.feedback || '{}') : (r.feedback || {});
+          isGraded = feedbackObj?.status === "graded";
+        } catch {
+          isGraded = false;
+        }
+        return {
+          ...r,
+          studentName: studentInfo?.name || "Học sinh ẩn danh",
+          studentCode: studentInfo?.code || "---",
+          isGraded,
+        };
+      });
+
+      setBulkSubmissions(formatted);
+      setSelectedSubmissionIds(formatted.map(f => f.exam_result_id));
+    } catch (err) {
+      console.error("Error loading submissions:", err);
+      toast.error("Không thể tải danh sách bài nộp của học sinh.");
+    } finally {
+      setLoadingSubmissions(false);
+    }
+  };
 
   const handleOpenChangeBulkGrading = (open: boolean) => {
     if (bulkGradingStatus === "grading") {
@@ -181,6 +247,9 @@ export function ClassroomDetailScreen() {
     setBulkGradingStatus("idle");
     setBulkGradingMessage("");
     setBulkGradingProgress({ total: 0, current: 0 });
+    setSelectedSubmissionIds([]);
+    setBulkSubmissions([]);
+    fetchBulkSubmissions(assignment.exam_id);
   };
 
   const pollTask = async (taskFn: () => Promise<any>) => {
@@ -196,8 +265,17 @@ export function ClassroomDetailScreen() {
     }
   };
 
-  const handleStartBulkGrading = async (assignmentToGrade = selectedAssignment) => {
+  const handleStartBulkGrading = async (
+    assignmentToGrade = selectedAssignment,
+    submissionIdsToGrade = selectedSubmissionIds
+  ) => {
     if (!assignmentToGrade) return;
+    const targetIds = submissionIdsToGrade.length > 0 ? submissionIdsToGrade : selectedSubmissionIds;
+    if (targetIds.length === 0) {
+      toast.error("Vui lòng chọn ít nhất một học sinh để chấm!");
+      return;
+    }
+
     setBulkGradingStatus("grading");
     setBulkGradingMessage("Đang lấy danh sách bài làm cần chấm...");
 
@@ -207,7 +285,8 @@ export function ClassroomDetailScreen() {
       assignment: assignmentToGrade,
       status: "grading",
       progress: { total: 0, current: 0 },
-      message: "Đang lấy danh sách bài làm cần chấm..."
+      message: "Đang lấy danh sách bài làm cần chấm...",
+      selectedSubmissionIds: targetIds
     }));
 
     try {
@@ -219,36 +298,30 @@ export function ClassroomDetailScreen() {
 
       if (resultsError) throw resultsError;
 
-      const pendingSubmissions = resultsData?.filter(r => {
-        try {
-          const feedbackObj = typeof r.feedback === 'string' ? JSON.parse(r.feedback) : r.feedback;
-          return feedbackObj?.status !== "graded";
-        } catch {
-          return true;
-        }
-      }) || [];
+      const submissionsToGrade = resultsData?.filter(r => targetIds.includes(r.exam_result_id)) || [];
 
-      if (pendingSubmissions.length === 0) {
+      if (submissionsToGrade.length === 0) {
         setBulkGradingStatus("success");
-        setBulkGradingMessage("Không có bài làm nào cần chấm!");
+        setBulkGradingMessage("Không có bài làm nào được chọn để chấm!");
         localStorage.setItem("scorify_bulk_grading_state", JSON.stringify({
           classId,
           assignment: assignmentToGrade,
           status: "success",
           progress: { total: 0, current: 0 },
-          message: "Không có bài làm nào cần chấm!"
+          message: "Không có bài làm nào được chọn để chấm!"
         }));
         return;
       }
 
-      setBulkGradingProgress({ total: pendingSubmissions.length, current: 0 });
+      setBulkGradingProgress({ total: submissionsToGrade.length, current: 0 });
       setBulkGradingMessage("Đang chuẩn bị Rubric và Đề thi...");
       localStorage.setItem("scorify_bulk_grading_state", JSON.stringify({
         classId,
         assignment: assignmentToGrade,
         status: "grading",
-        progress: { total: pendingSubmissions.length, current: 0 },
-        message: "Đang chuẩn bị Rubric và Đề thi..."
+        progress: { total: submissionsToGrade.length, current: 0 },
+        message: "Đang chuẩn bị Rubric và Đề thi...",
+        selectedSubmissionIds: targetIds
       }));
 
       let rubricPath: string | null = null;
@@ -283,13 +356,20 @@ export function ClassroomDetailScreen() {
         classId,
         assignment: assignmentToGrade,
         status: "grading",
-        progress: { total: pendingSubmissions.length, current: 0 },
-        message: "Bắt đầu chấm AI..."
+        progress: { total: submissionsToGrade.length, current: 0 },
+        message: "Bắt đầu chấm AI...",
+        selectedSubmissionIds: targetIds
       }));
       let completedCount = 0;
       
+      const getStudentName = (stuId: string) => {
+        return students.find(s => s.id === stuId)?.name || "Học sinh ẩn danh";
+      };
+
       const processSubmission = async (submission: any) => {
+        const studentName = getStudentName(submission.student_id);
         try {
+          setBulkGradingMessage(`Đang tải bài làm của ${studentName}...`);
           let signedUrl = submission.signed_url;
           const filePath = getSubmissionPathFromSignedUrl(signedUrl);
           if (filePath) {
@@ -302,11 +382,13 @@ export function ClassroomDetailScreen() {
           const fileExt = blob.type.split('/')[1] || 'jpg';
           const imageFile = new File([blob], `sub_${submission.student_id}.${fileExt}`, { type: blob.type });
 
+          setBulkGradingMessage(`Đang phân tích bố cục bài làm của ${studentName}...`);
           const detectQueueRes = await queueEndpoints.registerQueue();
           const detectTaskId = detectQueueRes.data.task_id;
           const detectResponse = await pollTask(() => documentEndpoints.detectLayout(detectTaskId, imageFile));
           const documentJsonStr = JSON.stringify(detectResponse);
 
+          setBulkGradingMessage(`Đang chấm điểm bài làm của ${studentName}...`);
           const gradingQueueRes = await queueEndpoints.registerQueue();
           const gradingTaskId = gradingQueueRes.data.task_id;
           const gradingResponse = await pollTask(() => gradingEndpoints.gradeByRubric(gradingTaskId, examFile, rubricFile, documentJsonStr));
@@ -340,7 +422,8 @@ export function ClassroomDetailScreen() {
               assignment: assignmentToGrade,
               status: "grading",
               progress: next,
-              message: "Bắt đầu chấm AI..."
+              message: `Đang xử lý bài tiếp theo...`,
+              selectedSubmissionIds: targetIds
             }));
             return next;
           });
@@ -349,7 +432,7 @@ export function ClassroomDetailScreen() {
 
       const concurrency = 5;
       const executing = new Set<Promise<any>>();
-      for (const sub of pendingSubmissions) {
+      for (const sub of submissionsToGrade) {
         if (!isBulkGradingOpenRef.current) break; // check ref to stop if closed
         const p = Promise.resolve().then(() => processSubmission(sub));
         executing.add(p);
@@ -367,8 +450,9 @@ export function ClassroomDetailScreen() {
         classId,
         assignment: assignmentToGrade,
         status: "success",
-        progress: { total: pendingSubmissions.length, current: pendingSubmissions.length },
-        message: "Đã chấm xong hàng loạt!"
+        progress: { total: submissionsToGrade.length, current: submissionsToGrade.length },
+        message: "Đã chấm xong hàng loạt!",
+        selectedSubmissionIds: targetIds
       }));
 
     } catch (err: any) {
@@ -380,7 +464,8 @@ export function ClassroomDetailScreen() {
         assignment: assignmentToGrade,
         status: "error",
         progress: bulkGradingProgress,
-        message: "Lỗi: " + err.message
+        message: "Lỗi: " + err.message,
+        selectedSubmissionIds: targetIds
       }));
     }
   };
@@ -399,8 +484,12 @@ export function ClassroomDetailScreen() {
             setBulkGradingProgress(savedState.progress || { total: 0, current: 0 });
             setBulkGradingMessage(savedState.message || "");
             
+            if (savedState.selectedSubmissionIds) {
+              setSelectedSubmissionIds(savedState.selectedSubmissionIds);
+            }
+            
             if (savedState.status === "grading") {
-              handleStartBulkGrading(savedState.assignment);
+              handleStartBulkGrading(savedState.assignment, savedState.selectedSubmissionIds || []);
             }
           }
         } catch (e) {
@@ -870,26 +959,133 @@ export function ClassroomDetailScreen() {
 
       {/* DIALOG BULK GRADING */}
       <Dialog open={isBulkGradingOpen} onOpenChange={handleOpenChangeBulkGrading}>
-        <DialogContent className="rounded-2xl max-w-md p-6 bg-white">
+        <DialogContent className="rounded-2xl max-w-md p-6 bg-white max-h-[85vh] flex flex-col">
           <DialogHeader>
             <DialogTitle className="text-base font-bold text-slate-900 flex items-center gap-2">
               <Wand2 className="size-5 text-indigo-600" />
               Chấm bài hàng loạt
             </DialogTitle>
           </DialogHeader>
-          <div className="py-4 space-y-4 text-center">
-            <h3 className="text-sm font-bold text-slate-800">{selectedAssignment?.exam_name}</h3>
+          <div className="py-4 space-y-4 flex-1 overflow-y-auto min-h-0">
+            <h3 className="text-sm font-bold text-slate-800 text-center">{selectedAssignment?.exam_name}</h3>
             
             {bulkGradingStatus === "idle" && (
-              <p className="text-xs text-slate-500">
-                Hệ thống sẽ tự động quét và chấm các bài làm chưa được chấm (trạng thái chờ). Quá trình có thể mất vài phút.
-              </p>
+              <div className="space-y-4">
+                <p className="text-xs text-slate-500 text-center">
+                  Chọn học sinh bạn muốn thực hiện chấm bài (chỉ hiển thị những học sinh đã tải lên bài làm).
+                </p>
+
+                {loadingSubmissions ? (
+                  <div className="flex flex-col items-center justify-center py-6 space-y-2">
+                    <Loader2 className="size-6 text-indigo-600 animate-spin" />
+                    <p className="text-[10px] text-slate-400 font-medium">Đang tải danh sách bài nộp...</p>
+                  </div>
+                ) : bulkSubmissions.length === 0 ? (
+                  <div className="text-center py-6 text-slate-400 text-xs">
+                    Không có học sinh nào đã tải lên bài làm cho bài tập này.
+                  </div>
+                ) : (
+                  <div className="space-y-3">
+                     <div className="flex flex-col gap-2 border-b border-slate-100 pb-3">
+                      <div className="flex items-center justify-between">
+                        <span className="text-xs font-bold text-slate-700">Lựa chọn nhanh:</span>
+                        <span className="text-[10px] text-slate-400 font-medium font-mono">
+                          Đã chọn: {selectedSubmissionIds.length} / {bulkSubmissions.length}
+                        </span>
+                      </div>
+                      <div className="flex flex-wrap gap-1.5">
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          type="button"
+                          onClick={() => setSelectedSubmissionIds(bulkSubmissions.map(s => s.exam_result_id))}
+                          className="h-7 text-[10px] px-2.5 rounded-lg border-slate-200 text-slate-600 hover:bg-slate-50 font-bold"
+                        >
+                          Chọn tất cả
+                        </Button>
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          type="button"
+                          onClick={() => setSelectedSubmissionIds(bulkSubmissions.filter(s => s.isGraded).map(s => s.exam_result_id))}
+                          className="h-7 text-[10px] px-2.5 rounded-lg border-emerald-200 text-emerald-700 bg-emerald-50 hover:bg-emerald-100 font-bold"
+                        >
+                          Chấm xong
+                        </Button>
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          type="button"
+                          onClick={() => setSelectedSubmissionIds(bulkSubmissions.filter(s => !s.isGraded).map(s => s.exam_result_id))}
+                          className="h-7 text-[10px] px-2.5 rounded-lg border-amber-200 text-amber-700 bg-amber-50 hover:bg-amber-100 font-bold"
+                        >
+                          Chưa chấm
+                        </Button>
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          type="button"
+                          onClick={() => setSelectedSubmissionIds([])}
+                          className="h-7 text-[10px] px-2 text-rose-600 hover:bg-rose-50 font-bold ml-auto"
+                        >
+                          Bỏ chọn
+                        </Button>
+                      </div>
+                    </div>
+
+                    <div className="space-y-2 max-h-[250px] overflow-y-auto pr-1">
+                      {bulkSubmissions.map((sub) => (
+                        <label
+                          key={sub.exam_result_id}
+                          className="flex items-center justify-between p-2.5 rounded-xl border border-slate-100 hover:bg-slate-50/50 cursor-pointer transition-colors"
+                        >
+                          <div className="flex items-center gap-2.5">
+                            <input
+                              type="checkbox"
+                              className="rounded border-slate-300 text-indigo-600 focus:ring-indigo-500 size-3.5"
+                              checked={selectedSubmissionIds.includes(sub.exam_result_id)}
+                              onChange={(e) => {
+                                if (e.target.checked) {
+                                  setSelectedSubmissionIds(prev => [...prev, sub.exam_result_id]);
+                                } else {
+                                  setSelectedSubmissionIds(prev => prev.filter(id => id !== sub.exam_result_id));
+                                }
+                              }}
+                            />
+                            <div>
+                              <p className="text-xs font-bold text-slate-800 leading-none">{sub.studentName}</p>
+                              <span className="text-[10px] text-slate-400 font-mono mt-1 inline-block">Mã HS: {sub.studentCode}</span>
+                            </div>
+                          </div>
+
+                          <div>
+                            {sub.isGraded ? (
+                              <Badge className="bg-emerald-50 text-emerald-700 hover:bg-emerald-50 border-emerald-100 border text-[9px] font-bold">
+                                Đã chấm
+                              </Badge>
+                            ) : (
+                              <Badge className="bg-amber-50 text-amber-700 hover:bg-amber-50 border-amber-100 border text-[9px] font-bold">
+                                Chưa chấm
+                              </Badge>
+                            )}
+                          </div>
+                        </label>
+                      ))}
+                    </div>
+                  </div>
+                )}
+              </div>
             )}
             
             {bulkGradingStatus === "grading" && (
-              <div className="space-y-4">
+              <div className="space-y-4 py-4 text-center">
                 <Loader2 className="size-8 text-indigo-600 animate-spin mx-auto" />
-                <p className="text-xs font-bold text-indigo-600">{bulkGradingMessage}</p>
+                <div className="flex flex-col items-center gap-1">
+                  <p className="text-xs font-bold text-indigo-600">{bulkGradingMessage}</p>
+                  <p className="text-[10px] text-slate-400 font-mono flex items-center gap-1 mt-1">
+                    <Clock className="size-3" /> Thời gian đã trôi qua: {formatTime(elapsedTime)}
+                  </p>
+                </div>
                 {bulkGradingProgress.total > 0 && (
                   <div>
                     <div className="w-full bg-slate-100 rounded-full h-2.5 mb-1 overflow-hidden">
@@ -902,25 +1098,31 @@ export function ClassroomDetailScreen() {
             )}
 
             {bulkGradingStatus === "success" && (
-              <div className="space-y-2">
+              <div className="space-y-2 py-4 text-center">
                 <CheckCircle2 className="size-10 text-emerald-500 mx-auto" />
                 <p className="text-sm font-bold text-emerald-600">{bulkGradingMessage}</p>
+                <p className="text-[10px] text-slate-400 font-mono">Tổng thời gian: {formatTime(elapsedTime)}</p>
               </div>
             )}
 
             {bulkGradingStatus === "error" && (
-              <div className="space-y-2">
+              <div className="space-y-2 py-4 text-center">
                 <AlertTriangle className="size-10 text-red-500 mx-auto" />
                 <p className="text-xs text-red-600">{bulkGradingMessage}</p>
+                <p className="text-[10px] text-slate-400 font-mono">Đã chạy được: {formatTime(elapsedTime)} trước khi lỗi</p>
               </div>
             )}
           </div>
-          <DialogFooter className="mt-2 border-t border-slate-50 pt-4">
+          <DialogFooter className="mt-4 border-t border-slate-50 pt-4 flex sm:justify-end gap-2">
             <Button variant="ghost" onClick={() => handleOpenChangeBulkGrading(false)} className="text-xs font-bold h-9" disabled={bulkGradingStatus === "grading"}>
               Đóng
             </Button>
             {bulkGradingStatus === "idle" && (
-              <Button onClick={handleStartBulkGrading} className="bg-indigo-600 hover:bg-indigo-700 text-white font-bold text-xs h-9">
+              <Button
+                onClick={() => handleStartBulkGrading()}
+                disabled={bulkSubmissions.length === 0 || selectedSubmissionIds.length === 0 || loadingSubmissions}
+                className="bg-indigo-600 hover:bg-indigo-700 text-white font-bold text-xs h-9 disabled:opacity-50"
+              >
                 Bắt đầu chấm
               </Button>
             )}

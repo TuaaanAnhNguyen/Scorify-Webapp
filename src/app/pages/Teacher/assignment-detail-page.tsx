@@ -77,6 +77,76 @@ export function AssignmentDetailPage() {
   const [bulkGradingStatus, setBulkGradingStatus] = React.useState<"idle" | "grading" | "success" | "error">("idle");
   const [bulkGradingProgress, setBulkGradingProgress] = React.useState({ total: 0, current: 0 });
   const [bulkGradingMessage, setBulkGradingMessage] = React.useState("");
+  const [bulkSubmissions, setBulkSubmissions] = React.useState<any[]>([]);
+  const [selectedSubmissionIds, setSelectedSubmissionIds] = React.useState<string[]>([]);
+  const [loadingSubmissions, setLoadingSubmissions] = React.useState(false);
+
+  const [elapsedTime, setElapsedTime] = React.useState(0);
+
+  // Delete Submission Dialog State
+  const [deleteDialogOpen, setDeleteDialogOpen] = React.useState(false);
+  const [studentToDelete, setStudentToDelete] = React.useState<{ id: string; name: string } | null>(null);
+
+  React.useEffect(() => {
+    let timerInterval: any = null;
+    if (bulkGradingStatus === "grading") {
+      setElapsedTime(0);
+      timerInterval = setInterval(() => {
+        setElapsedTime(prev => prev + 1);
+      }, 1000);
+    } else {
+      if (timerInterval) {
+        clearInterval(timerInterval);
+      }
+    }
+    return () => {
+      if (timerInterval) clearInterval(timerInterval);
+    };
+  }, [bulkGradingStatus]);
+
+  const formatTime = (seconds: number) => {
+    const mins = Math.floor(seconds / 60);
+    const secs = seconds % 60;
+    return `${mins.toString().padStart(2, '0')}:${secs.toString().padStart(2, '0')}`;
+  };
+
+  const fetchBulkSubmissions = async (assignmentId: string) => {
+    try {
+      setLoadingSubmissions(true);
+      const { data, error } = await supabaseClient
+        .from('exam_result')
+        .select('*')
+        .eq('exam_id', assignmentId)
+        .not('signed_url', 'is', null);
+
+      if (error) throw error;
+
+      const formatted = (data || []).map(r => {
+        const studentInfo = students.find(s => s.student_id === r.student_id);
+        let isGraded = false;
+        try {
+          const feedbackObj = typeof r.feedback === 'string' ? JSON.parse(r.feedback || '{}') : (r.feedback || {});
+          isGraded = feedbackObj?.status === "graded";
+        } catch {
+          isGraded = false;
+        }
+        return {
+          ...r,
+          studentName: studentInfo?.full_name || "Học sinh ẩn danh",
+          studentCode: studentInfo?.student_code || "---",
+          isGraded,
+        };
+      });
+
+      setBulkSubmissions(formatted);
+      setSelectedSubmissionIds(formatted.map(f => f.exam_result_id));
+    } catch (err) {
+      console.error("Error loading submissions:", err);
+      toast.error("Không thể tải danh sách bài nộp của học sinh.");
+    } finally {
+      setLoadingSubmissions(false);
+    }
+  };
 
   React.useEffect(() => {
     const fetchData = async () => {
@@ -211,8 +281,14 @@ export function AssignmentDetailPage() {
     }
   };
 
-  const handleStartBulkGrading = async () => {
+  const handleStartBulkGrading = async (submissionIdsToGrade = selectedSubmissionIds) => {
     if (!exam) return;
+    const targetIds = submissionIdsToGrade.length > 0 ? submissionIdsToGrade : selectedSubmissionIds;
+    if (targetIds.length === 0) {
+      toast.error("Vui lòng chọn ít nhất một học sinh để chấm!");
+      return;
+    }
+
     setBulkGradingStatus("grading");
     setBulkGradingMessage("Đang lấy danh sách bài làm cần chấm...");
 
@@ -225,22 +301,15 @@ export function AssignmentDetailPage() {
 
       if (resultsError) throw resultsError;
 
-      const pendingSubmissions = resultsData?.filter(r => {
-        try {
-          const feedbackObj = typeof r.feedback === 'string' ? JSON.parse(r.feedback) : r.feedback;
-          return feedbackObj?.status !== "graded";
-        } catch {
-          return true;
-        }
-      }) || [];
+      const submissionsToGrade = resultsData?.filter(r => targetIds.includes(r.exam_result_id)) || [];
 
-      if (pendingSubmissions.length === 0) {
+      if (submissionsToGrade.length === 0) {
         setBulkGradingStatus("success");
-        setBulkGradingMessage("Không có bài làm nào cần chấm!");
+        setBulkGradingMessage("Không có bài làm nào được chọn để chấm!");
         return;
       }
 
-      setBulkGradingProgress({ total: pendingSubmissions.length, current: 0 });
+      setBulkGradingProgress({ total: submissionsToGrade.length, current: 0 });
       setBulkGradingMessage("Đang chuẩn bị Rubric và Đề thi...");
 
       const rubricPath = exam.rubricPath;
@@ -268,8 +337,14 @@ export function AssignmentDetailPage() {
       setBulkGradingMessage("Bắt đầu chấm AI...");
       let completedCount = 0;
       
+      const getStudentName = (stuId: string) => {
+        return students.find(s => s.student_id === stuId)?.full_name || "Học sinh ẩn danh";
+      };
+
       const processSubmission = async (submission: any) => {
+        const studentName = getStudentName(submission.student_id);
         try {
+          setBulkGradingMessage(`Đang tải bài làm của ${studentName}...`);
           let signedUrl = submission.signed_url;
           const filePath = getSubmissionPathFromSignedUrl(signedUrl);
           if (filePath) {
@@ -282,11 +357,13 @@ export function AssignmentDetailPage() {
           const fileExt = blob.type.split('/')[1] || 'jpg';
           const imageFile = new File([blob], `sub_${submission.student_id}.${fileExt}`, { type: blob.type });
 
+          setBulkGradingMessage(`Đang phân tích bố cục bài làm của ${studentName}...`);
           const detectQueueRes = await queueEndpoints.registerQueue();
           const detectTaskId = detectQueueRes.data.task_id;
           const detectResponse = await pollTask(() => documentEndpoints.detectLayout(detectTaskId, imageFile));
           const documentJsonStr = JSON.stringify(detectResponse);
 
+          setBulkGradingMessage(`Đang chấm điểm bài làm của ${studentName}...`);
           const gradingQueueRes = await queueEndpoints.registerQueue();
           const gradingTaskId = gradingQueueRes.data.task_id;
           const gradingResponse = await pollTask(() => gradingEndpoints.gradeByRubric(gradingTaskId, examFile, rubricFile, documentJsonStr));
@@ -319,7 +396,7 @@ export function AssignmentDetailPage() {
 
       const concurrency = 5;
       const executing = new Set<Promise<any>>();
-      for (const sub of pendingSubmissions) {
+      for (const sub of submissionsToGrade) {
         if (!isBulkGradingOpen) break;
         const p = Promise.resolve().then(() => processSubmission(sub));
         executing.add(p);
@@ -407,7 +484,6 @@ export function AssignmentDetailPage() {
             signed_url: submissionImageUrl,
             feedback: initialFeedback,
             score: 0, // 0 denotes ungraded
-            graded_at: null
           })
           .eq('exam_result_id', existingResult.exam_result_id);
           
@@ -421,7 +497,6 @@ export function AssignmentDetailPage() {
             signed_url: submissionImageUrl,
             feedback: initialFeedback,
             score: 0, // 0 denotes ungraded
-            // graded_at remains null since it's not graded yet
           });
 
         if (insertError) throw insertError;
@@ -438,15 +513,15 @@ export function AssignmentDetailPage() {
     }
   };
 
-  const handleDeleteSubmission = async (studentId: string) => {
-    if (!window.confirm("Bạn có chắc chắn muốn hủy kết quả/thu hồi bài làm này không?")) return;
+  const confirmDeleteSubmission = async () => {
+    if (!studentToDelete) return;
 
     toast.loading("Đang hủy kết quả...", { id: "delete-submission" });
     try {
       const { error } = await supabaseClient
         .from('exam_result')
         .delete()
-        .match({ exam_id: examId, student_id: studentId });
+        .match({ exam_id: examId, student_id: studentToDelete.id });
 
       if (error) throw error;
 
@@ -455,6 +530,9 @@ export function AssignmentDetailPage() {
     } catch (error: any) {
       console.error("Delete error:", error);
       toast.error(`Lỗi khi hủy kết quả: ${error.message}`, { id: "delete-submission" });
+    } finally {
+      setDeleteDialogOpen(false);
+      setStudentToDelete(null);
     }
   };
 
@@ -523,6 +601,9 @@ export function AssignmentDetailPage() {
                setBulkGradingStatus("idle");
                setBulkGradingMessage("");
                setBulkGradingProgress({ total: 0, current: 0 });
+               setSelectedSubmissionIds([]);
+               setBulkSubmissions([]);
+               if (examId) fetchBulkSubmissions(examId);
              }}
            >
             <Wand2 className="size-4 mr-1.5" /> Chấm bài hàng loạt (AI)
@@ -674,17 +755,28 @@ export function AssignmentDetailPage() {
                   </TableCell>
                   <TableCell className="text-center">
                     {stu.result ? (
-                      stu.result.graded_at ? (
-                        <span className="inline-flex items-center gap-1 text-[10px] font-bold text-emerald-600 bg-emerald-50 px-2 py-0.5 rounded-full">
-                          <CheckCircle2 className="size-2.5" />
-                          Đã chấm xong
-                        </span>
-                      ) : (
-                        <span className="inline-flex items-center gap-1 text-[10px] font-bold text-amber-600 bg-amber-50 px-2 py-0.5 rounded-full">
-                          <Clock className="size-2.5" />
-                          Đã nộp (Chờ chấm)
-                        </span>
-                      )
+                      (() => {
+                        let isGraded = false;
+                        try {
+                          const feedbackObj = typeof stu.result.feedback === 'string'
+                            ? JSON.parse(stu.result.feedback || '{}')
+                            : (stu.result.feedback || {});
+                          isGraded = feedbackObj?.status === "graded";
+                        } catch {
+                          isGraded = false;
+                        }
+                        return isGraded ? (
+                          <span className="inline-flex items-center gap-1 text-[10px] font-bold text-emerald-600 bg-emerald-50 px-2 py-0.5 rounded-full">
+                            <CheckCircle2 className="size-2.5" />
+                            Đã chấm xong
+                          </span>
+                        ) : (
+                          <span className="inline-flex items-center gap-1 text-[10px] font-bold text-amber-600 bg-amber-50 px-2 py-0.5 rounded-full">
+                            <Clock className="size-2.5" />
+                            Đã nộp (Chờ chấm)
+                          </span>
+                        );
+                      })()
                     ) : (
                       <span className="inline-flex items-center gap-1 text-[10px] font-bold text-slate-400 bg-slate-100 px-2 py-0.5 rounded-full">
                         Chưa có bài
@@ -692,7 +784,18 @@ export function AssignmentDetailPage() {
                     )}
                   </TableCell>
                   <TableCell className="text-right">
-                    {stu.result && stu.result.graded_at ? (
+                    {stu.result && (() => {
+                      let isGraded = false;
+                      try {
+                        const feedbackObj = typeof stu.result.feedback === 'string'
+                          ? JSON.parse(stu.result.feedback || '{}')
+                          : (stu.result.feedback || {});
+                        isGraded = feedbackObj?.status === "graded";
+                      } catch {
+                        isGraded = false;
+                      }
+                      return isGraded;
+                    })() ? (
                       <span className="font-mono font-bold text-slate-900 bg-slate-100 px-2 py-0.5 rounded border border-slate-200">
                         {stu.result.score?.toFixed(1)} / {exam.max_score}
                       </span>
@@ -743,7 +846,10 @@ export function AssignmentDetailPage() {
                           variant="ghost" 
                           size="icon" 
                           className="size-8 rounded-lg text-rose-500 hover:bg-rose-50 hover:text-rose-600"
-                          onClick={() => handleDeleteSubmission(stu.student_id)}
+                          onClick={() => {
+                            setStudentToDelete({ id: stu.student_id, name: stu.full_name });
+                            setDeleteDialogOpen(true);
+                          }}
                           title="Hủy kết quả / Xóa bài"
                         >
                           <Trash2 className="size-4" />
@@ -810,7 +916,7 @@ export function AssignmentDetailPage() {
         }}
       >
         <DialogContent 
-          className="rounded-2xl max-w-md p-6 bg-white"
+          className="rounded-2xl max-w-md p-6 bg-white max-h-[85vh] flex flex-col"
           onInteractOutside={(e) => {
             if (bulkGradingStatus === "grading") e.preventDefault();
           }}
@@ -824,19 +930,126 @@ export function AssignmentDetailPage() {
               Chấm bài hàng loạt
             </DialogTitle>
           </DialogHeader>
-          <div className="py-4 space-y-4 text-center">
-            <h3 className="text-sm font-bold text-slate-800">{exam?.exam_name}</h3>
+          <div className="py-4 space-y-4 flex-1 overflow-y-auto min-h-0">
+            <h3 className="text-sm font-bold text-slate-800 text-center">{exam?.exam_name}</h3>
             
             {bulkGradingStatus === "idle" && (
-              <p className="text-xs text-slate-500">
-                Hệ thống sẽ tự động quét và chấm các bài làm chưa được chấm (trạng thái chờ). Quá trình có thể mất vài phút, vui lòng không đóng cửa sổ này.
-              </p>
+              <div className="space-y-4">
+                <p className="text-xs text-slate-500 text-center">
+                  Chọn học sinh bạn muốn thực hiện chấm bài (chỉ hiển thị những học sinh đã tải lên bài làm).
+                </p>
+
+                {loadingSubmissions ? (
+                  <div className="flex flex-col items-center justify-center py-6 space-y-2">
+                    <Loader2 className="size-6 text-indigo-600 animate-spin" />
+                    <p className="text-[10px] text-slate-400 font-medium">Đang tải danh sách bài nộp...</p>
+                  </div>
+                ) : bulkSubmissions.length === 0 ? (
+                  <div className="text-center py-6 text-slate-400 text-xs">
+                    Không có học sinh nào đã tải lên bài làm cho bài tập này.
+                  </div>
+                ) : (
+                  <div className="space-y-3">
+                     <div className="flex flex-col gap-2 border-b border-slate-100 pb-3">
+                      <div className="flex items-center justify-between">
+                        <span className="text-xs font-bold text-slate-700">Lựa chọn nhanh:</span>
+                        <span className="text-[10px] text-slate-400 font-medium font-mono">
+                          Đã chọn: {selectedSubmissionIds.length} / {bulkSubmissions.length}
+                        </span>
+                      </div>
+                      <div className="flex flex-wrap gap-1.5">
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          type="button"
+                          onClick={() => setSelectedSubmissionIds(bulkSubmissions.map(s => s.exam_result_id))}
+                          className="h-7 text-[10px] px-2.5 rounded-lg border-slate-200 text-slate-600 hover:bg-slate-50 font-bold"
+                        >
+                          Chọn tất cả
+                        </Button>
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          type="button"
+                          onClick={() => setSelectedSubmissionIds(bulkSubmissions.filter(s => s.isGraded).map(s => s.exam_result_id))}
+                          className="h-7 text-[10px] px-2.5 rounded-lg border-emerald-200 text-emerald-700 bg-emerald-50 hover:bg-emerald-100 font-bold"
+                        >
+                          Chấm xong
+                        </Button>
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          type="button"
+                          onClick={() => setSelectedSubmissionIds(bulkSubmissions.filter(s => !s.isGraded).map(s => s.exam_result_id))}
+                          className="h-7 text-[10px] px-2.5 rounded-lg border-amber-200 text-amber-700 bg-amber-50 hover:bg-amber-100 font-bold"
+                        >
+                          Chưa chấm
+                        </Button>
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          type="button"
+                          onClick={() => setSelectedSubmissionIds([])}
+                          className="h-7 text-[10px] px-2 text-rose-600 hover:bg-rose-50 font-bold ml-auto"
+                        >
+                          Bỏ chọn
+                        </Button>
+                      </div>
+                    </div>
+
+                    <div className="space-y-2 max-h-[250px] overflow-y-auto pr-1">
+                      {bulkSubmissions.map((sub) => (
+                        <label
+                          key={sub.exam_result_id}
+                          className="flex items-center justify-between p-2.5 rounded-xl border border-slate-100 hover:bg-slate-50/50 cursor-pointer transition-colors"
+                        >
+                          <div className="flex items-center gap-2.5">
+                            <input
+                              type="checkbox"
+                              className="rounded border-slate-300 text-indigo-600 focus:ring-indigo-500 size-3.5"
+                              checked={selectedSubmissionIds.includes(sub.exam_result_id)}
+                              onChange={(e) => {
+                                if (e.target.checked) {
+                                  setSelectedSubmissionIds(prev => [...prev, sub.exam_result_id]);
+                                } else {
+                                  setSelectedSubmissionIds(prev => prev.filter(id => id !== sub.exam_result_id));
+                                }
+                              }}
+                            />
+                            <div>
+                              <p className="text-xs font-bold text-slate-800 leading-none">{sub.studentName}</p>
+                              <span className="text-[10px] text-slate-400 font-mono mt-1 inline-block">Mã HS: {sub.studentCode}</span>
+                            </div>
+                          </div>
+
+                          <div>
+                            {sub.isGraded ? (
+                              <Badge className="bg-emerald-50 text-emerald-700 hover:bg-emerald-50 border-emerald-100 border text-[9px] font-bold">
+                                Đã chấm
+                              </Badge>
+                            ) : (
+                              <Badge className="bg-amber-50 text-amber-700 hover:bg-amber-50 border-amber-100 border text-[9px] font-bold">
+                                Chưa chấm
+                              </Badge>
+                            )}
+                          </div>
+                        </label>
+                      ))}
+                    </div>
+                  </div>
+                )}
+              </div>
             )}
             
             {bulkGradingStatus === "grading" && (
-              <div className="space-y-4">
+              <div className="space-y-4 py-4 text-center">
                 <Loader2 className="size-8 text-indigo-600 animate-spin mx-auto" />
-                <p className="text-xs font-bold text-indigo-600">{bulkGradingMessage}</p>
+                <div className="flex flex-col items-center gap-1">
+                  <p className="text-xs font-bold text-indigo-600">{bulkGradingMessage}</p>
+                  <p className="text-[10px] text-slate-400 font-mono flex items-center gap-1 mt-1">
+                    <Clock className="size-3" /> Thời gian đã trôi qua: {formatTime(elapsedTime)}
+                  </p>
+                </div>
                 {bulkGradingProgress.total > 0 && (
                   <div>
                     <div className="w-full bg-slate-100 rounded-full h-2.5 mb-1 overflow-hidden">
@@ -849,27 +1062,33 @@ export function AssignmentDetailPage() {
             )}
 
             {bulkGradingStatus === "success" && (
-              <div className="space-y-2">
+              <div className="space-y-2 py-4 text-center">
                 <CheckCircle2 className="size-10 text-emerald-500 mx-auto" />
                 <p className="text-sm font-bold text-emerald-600">{bulkGradingMessage}</p>
+                <p className="text-[10px] text-slate-400 font-mono">Tổng thời gian: {formatTime(elapsedTime)}</p>
               </div>
             )}
 
             {bulkGradingStatus === "error" && (
-              <div className="space-y-2">
+              <div className="space-y-2 py-4 text-center">
                 <AlertTriangle className="size-10 text-red-500 mx-auto" />
                 <p className="text-xs text-red-600">{bulkGradingMessage}</p>
+                <p className="text-[10px] text-slate-400 font-mono">Đã chạy được: {formatTime(elapsedTime)} trước khi lỗi</p>
               </div>
             )}
           </div>
-          <DialogFooter className="mt-2 border-t border-slate-50 pt-4">
+          <DialogFooter className="mt-4 border-t border-slate-50 pt-4 flex sm:justify-end gap-2">
             {bulkGradingStatus !== "grading" && bulkGradingStatus !== "success" && (
               <Button variant="ghost" onClick={() => setIsBulkGradingOpen(false)} className="text-xs font-bold h-9">
                 Đóng
               </Button>
             )}
             {bulkGradingStatus === "idle" && (
-              <Button onClick={handleStartBulkGrading} className="bg-indigo-600 hover:bg-indigo-700 text-white font-bold text-xs h-9">
+              <Button
+                onClick={() => handleStartBulkGrading()}
+                disabled={bulkSubmissions.length === 0 || selectedSubmissionIds.length === 0 || loadingSubmissions}
+                className="bg-indigo-600 hover:bg-indigo-700 text-white font-bold text-xs h-9 disabled:opacity-50"
+              >
                 Bắt đầu chấm
               </Button>
             )}
@@ -878,6 +1097,43 @@ export function AssignmentDetailPage() {
                 Hoàn tất
               </Button>
             )}
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* CUSTOM CONFIRM DELETE DIALOG */}
+      <Dialog open={deleteDialogOpen} onOpenChange={setDeleteDialogOpen}>
+        <DialogContent className="max-w-md bg-white rounded-2xl p-6 border-none shadow-2xl animate-in fade-in duration-200">
+          <div className="flex flex-col items-center text-center space-y-4">
+            <div className="size-12 bg-rose-50 text-rose-500 rounded-full flex items-center justify-center shrink-0 shadow-sm animate-bounce">
+              <Trash2 className="size-6" />
+            </div>
+            <div className="space-y-2">
+              <DialogTitle className="text-base font-bold text-slate-900">
+                Hủy kết quả bài làm?
+              </DialogTitle>
+              <p className="text-xs text-slate-500 max-w-sm leading-relaxed">
+                Bạn có chắc chắn muốn hủy kết quả và thu hồi bài làm của học sinh <span className="font-bold text-slate-850 text-indigo-600">{studentToDelete?.name}</span> không? Hành động này không thể hoàn tác.
+              </p>
+            </div>
+          </div>
+          <DialogFooter className="mt-6 flex sm:justify-center gap-2 border-t border-slate-100 pt-4">
+            <Button 
+              variant="ghost" 
+              onClick={() => {
+                setDeleteDialogOpen(false);
+                setStudentToDelete(null);
+              }} 
+              className="text-xs font-bold h-10 px-4 rounded-xl border border-slate-200 hover:bg-slate-50 text-slate-500"
+            >
+              Hủy
+            </Button>
+            <Button
+              onClick={confirmDeleteSubmission}
+              className="bg-rose-600 hover:bg-rose-700 text-white font-bold text-xs h-10 px-4 rounded-xl shadow-md"
+            >
+              Xác nhận xóa
+            </Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>
